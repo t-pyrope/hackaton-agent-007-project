@@ -169,7 +169,7 @@ export const Chat = ({
           <button
             disabled={busy}
             onClick={() => {
-              setPrompt("Remove Background");
+              setPrompt("Add a tool to remove backgrounds");
               textarea.current?.focus();
             }}
           >
@@ -178,7 +178,7 @@ export const Chat = ({
           <button
             disabled={busy}
             onClick={() => {
-              setPrompt("Black & White");
+              setPrompt("Add a tool to make image black & white");
               textarea.current?.focus();
             }}
           >
@@ -244,6 +244,12 @@ export const Chat = ({
           maxLength={8000}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              if (!e.repeat) e.currentTarget.form?.requestSubmit();
+            }
+          }}
           disabled={busy}
         />
         <div>

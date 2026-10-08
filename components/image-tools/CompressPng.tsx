@@ -39,6 +39,7 @@ export default function CompressPng() {
     delete urls.current.result;
     setResult(null);
   }
+
   function load(files: FileList | null) {
     if (request.current || !files?.length) return;
     setError("");
@@ -47,6 +48,7 @@ export default function CompressPng() {
     delete urls.current.source;
     setSource("");
     setFile(null);
+
     if (files.length !== 1) {
       setError("Please upload exactly one static PNG file.");
       return;

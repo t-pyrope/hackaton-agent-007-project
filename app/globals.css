@@ -1307,8 +1307,8 @@ textarea::placeholder {
 .compression-format {
   padding: 2px 10px;
   border-radius: 5px;
-  background: #f0f7ff;
-  color: #2583e9;
+  background: var(--lime);
+  color: #171717;
   font-weight: 700;
 }
 
@@ -1334,18 +1334,18 @@ textarea::placeholder {
   gap: 10px;
   padding: 14px 18px;
   border-radius: 10px;
-  background: #f0f7ff;
-  color: #2583e9;
+  background: black;
+  color: white;
   font-weight: 700;
   text-decoration: none;
 }
 
 .compression-download:hover {
-  background: #e0efff;
+  background: #323232;
 }
 
 .compression-download:focus-visible {
-  outline: 2px solid #2583e9;
+  outline: 2px solid #393939;
   outline-offset: 3px;
 }
 
