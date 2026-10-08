@@ -1,5 +1,7 @@
 import { ChatError, replyToChat, validateHistory } from "@/lib/openai";
 
+import { issueProposal } from "@/lib/proposals";
+
 export const runtime = "nodejs";
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -35,9 +37,12 @@ export async function POST(request: Request) {
       throw new ChatError("Invalid JSON. Send a messages array.");
     }
     const messages = validateHistory(body);
-    const message = await replyToChat(messages);
+    const reply = await replyToChat(messages);
     return Response.json(
-      { message },
+      {
+        message: reply.message,
+        proposal: reply.proposal ? issueProposal(reply.proposal) : null,
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

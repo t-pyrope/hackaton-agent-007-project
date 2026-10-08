@@ -153,9 +153,14 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
               </strong>
               <p>
                 {tools[selected]
-                  ? "Mock tests: 3/3 passed · Input validation ✓ · Output format ✓ · UI integration ✓"
+                  ? `${tools[selected].testReport.results.filter((r) => r.passed).length}/${tools[selected].testReport.results.length} checks passed`
                   : "Add a new tool with Victor to unlock this part."}
               </p>
+              {tools[selected]?.testReport.results.map((result, index) => (
+                <p key={index}>
+                  {result.passed ? "✓" : "✕"} {result.name}
+                </p>
+              ))}
             </>
           )}
         </div>

@@ -15,8 +15,10 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.4.0",
+    "@neondatabase/serverless": "^1.2.0",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.39.0",
+    "@vercel/sandbox": "^3.6.1",
     "bcrypt": "^6.0.0",
     "drizzle-orm": "^0.45.4",
     "next": "16.4.0",
@@ -24,17 +26,20 @@
     "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "sharp": "^0.35.5"
+    "react-markdown": "^10.1.0",
+    "sharp": "^0.35.5",
+    "typescript": "^5",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
-    "prettier": "^3.9.9",
-    "typescript": "^5"
+    "prettier": "^3.9.9"
   }
 }

@@ -24,11 +24,11 @@ export const Sidebar = ({
           <span>Compress PNG</span>
           <span className="tool-dot" />
         </button>
-        {tools.map((tool, i) => (
+        {tools.map((tool) => (
           <button
-            className={activeTool === tool.name ? "tool active" : "tool"}
-            key={i}
-            onClick={() => setActiveTool(tool.name)}
+            className={activeTool === tool.id ? "tool active" : "tool"}
+            key={tool.id}
+            onClick={() => setActiveTool(tool.id)}
           >
             <Icon name="spark" />
             <span>{tool.name}</span>

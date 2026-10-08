@@ -31,6 +31,14 @@ export const tools = pgTable("tools", {
   testReport: jsonb("test_report")
     .$type<{
       passed: boolean;
+      proposal?: import("../lib/tool-contract").Proposal;
+      attempts?: Array<{
+        attempt: number;
+        report: {
+          passed: boolean;
+          results: Array<{ name: string; passed: boolean; error?: string }>;
+        };
+      }>;
       results: Array<{
         name: string;
         passed: boolean;
