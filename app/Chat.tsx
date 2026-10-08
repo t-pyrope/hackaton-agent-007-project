@@ -18,12 +18,13 @@ export const Chat = ({
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [busy, setBusy] = useState(false);
+  const [completed, setCompleted] = useState(false);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
 
   async function build() {
-    if (!proposal || inFlight.current) return;
+    if (!proposal || inFlight.current || completed) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
@@ -68,6 +69,8 @@ export const Chat = ({
                 : [...current, tool],
             );
             installed = true;
+            setCompleted(true);
+            setPrompt("");
             setProposal(null);
           }
         }
@@ -91,7 +94,7 @@ export const Chat = ({
   }
 
   async function send() {
-    if (!prompt.trim() || inFlight.current) return;
+    if (!prompt.trim() || inFlight.current || completed) return;
     const draft = prompt;
     const history: Message[] = [
       ...messages,
@@ -139,6 +142,16 @@ export const Chat = ({
     }
   }
 
+  function startNewChat() {
+    if (inFlight.current) return;
+    setMessages([]);
+    setPrompt("");
+    setProposal(null);
+    setBuildStatus("");
+    setError("");
+    setCompleted(false);
+  }
+
   return chat ? (
     <aside className="agent-panel">
       <div className="agent-heading">
@@ -167,7 +180,7 @@ export const Chat = ({
         </div>
         <div className="suggestions">
           <button
-            disabled={busy}
+            disabled={busy || completed}
             onClick={() => {
               setPrompt("Add a tool to remove backgrounds");
               textarea.current?.focus();
@@ -176,7 +189,7 @@ export const Chat = ({
             Remove background <span>↗</span>
           </button>
           <button
-            disabled={busy}
+            disabled={busy || completed}
             onClick={() => {
               setPrompt("Add a tool to make image black & white");
               textarea.current?.focus();
@@ -211,7 +224,7 @@ export const Chat = ({
             <button
               className="primary"
               style={{ marginTop: 20 }}
-              disabled={busy}
+              disabled={busy || completed}
               onClick={build}
             >
               Confirm &amp; Build
@@ -255,12 +268,23 @@ export const Chat = ({
               if (!e.repeat) e.currentTarget.form?.requestSubmit();
             }
           }}
-          disabled={busy}
+          disabled={busy || completed}
         />
         <div>
-          <button className="primary" disabled={!prompt.trim() || busy}>
-            Send <Icon name="arrow" size={18} />
-          </button>
+          {completed ? (
+            <button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={startNewChat}
+            >
+              Start new chat
+            </button>
+          ) : (
+            <button className="primary" disabled={!prompt.trim() || busy}>
+              Send <Icon name="arrow" size={18} />
+            </button>
+          )}
         </div>
       </form>
     </aside>
