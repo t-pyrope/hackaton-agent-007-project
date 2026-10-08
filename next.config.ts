@@ -5,8 +5,9 @@ const nextConfig: NextConfig = {
   experimental: {
     agentFeedback: true,
   },
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Explicit Node.js route runtime is incompatible with Cache Components.
+  cacheComponents: false,
+  partialPrefetching: false,
 };
 
 export default nextConfig;
