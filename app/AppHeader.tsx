@@ -16,6 +16,19 @@ const parts = [
   "Right foot",
 ];
 
+const partImages = [
+  { file: "head", x: 83, y: 12, width: 74, height: 80 },
+  { file: "body", x: 76, y: 96, width: 88, height: 100 },
+  { file: "left-sleeve", x: 32, y: 100, width: 48, height: 72 },
+  { file: "right-sleeve", x: 160, y: 100, width: 48, height: 72 },
+  { file: "left-hand", x: 26, y: 165, width: 34, height: 39 },
+  { file: "right-hand", x: 180, y: 165, width: 34, height: 39 },
+  { file: "left-leg", x: 79, y: 195, width: 36, height: 83 },
+  { file: "right-leg", x: 125, y: 195, width: 36, height: 83 },
+  { file: "left-boot", x: 65, y: 271, width: 50, height: 37 },
+  { file: "right-boot", x: 125, y: 271, width: 50, height: 37 },
+];
+
 function Creature({
   count,
   onPart,
@@ -72,14 +85,41 @@ function Creature({
             }
           }}
         >
-          {shape}
+          {i < count ? (
+            <image
+              href={`/franken-parts/${partImages[i].file}.png`}
+              x={partImages[i].x}
+              y={partImages[i].y}
+              width={partImages[i].width}
+              height={partImages[i].height}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          ) : (
+            shape
+          )}
         </g>
       ))}
-      <g stroke="currentColor" strokeWidth="3" fill="none">
-        <path d="M100 48v7m40-7v7m-36 14q16 10 32 0M84 123h72M113 123v13m12-13v8" />
-      </g>
-      <path d="M91 23v-8h58v8" fill="currentColor" />
-      <path d="M76 52H65m99 0h11" stroke="currentColor" strokeWidth="7" />
+      {count === 0 && (
+        <g pointerEvents="none">
+          <path
+            d="M100 48v7m40-7v7m-36 14q16 10 32 0"
+            stroke="currentColor"
+            strokeWidth="3"
+            fill="none"
+          />
+          <path d="M91 23v-8h58v8" fill="currentColor" />
+          <path d="M76 52H65m99 0h11" stroke="currentColor" strokeWidth="7" />
+        </g>
+      )}
+      {count < 2 && (
+        <path
+          d="M84 123h72M113 123v13m12-13v8"
+          stroke="currentColor"
+          strokeWidth="3"
+          fill="none"
+          pointerEvents="none"
+        />
+      )}
     </svg>
   );
 }
@@ -124,7 +164,10 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
         }}
       >
         <div className="modal-heading">
-          <div className="eyebrow">PIECE BY PIECE</div>
+          <div>
+            <h2 className="eyebrow">My creature</h2>
+            <p>Build your toolkit. Bring your creation to life.</p>
+          </div>
           <button
             className="icon-button"
             aria-label="Close My Creature"
@@ -133,14 +176,14 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
             <Icon name="close" />
           </button>
         </div>
-        <h2>My Frankenstein</h2>
-        <p>Build your toolkit. Bring your creation to life.</p>
         <div className="creature-display">
           <Creature count={tools.length} onPart={setSelected} />
         </div>
         <h3>Tools Installed: {tools.length}/10</h3>
         <div className="progress-track">
-          <span style={{ width: `${tools.length * 10}%` }} />
+          <span
+            style={{ width: `${Math.min(tools.length, parts.length) * 10}%` }}
+          />
         </div>
         <div className="part-detail" aria-live="polite">
           {selected === null ? (
