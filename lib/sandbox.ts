@@ -1,4 +1,5 @@
 import "server-only";
+import { BUILD_TIMEOUT_MS, timedStage } from "./build-timing";
 import { Sandbox } from "@vercel/sandbox";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,14 +30,23 @@ export async function checkSandboxConnection() {
   }
 }
 
-async function runtimeSandbox(signal?: AbortSignal) {
-  const sandbox = await Sandbox.create({
-    persistent: false,
-    timeout: 120_000,
-    resources: { vcpus: 1 },
-    networkPolicy: { allow: ["registry.npmjs.org"] },
-    signal,
-  });
+async function runtimeSandbox(
+  signal?: AbortSignal,
+  context?: Record<string, unknown>,
+) {
+  const buildTimeout = context ? BUILD_TIMEOUT_MS : undefined;
+  const sandbox = await timedStage(
+    "sandbox-start",
+    () =>
+      Sandbox.create({
+        persistent: false,
+        timeout: buildTimeout ?? 120_000,
+        resources: { vcpus: 1 },
+        networkPolicy: { allow: ["registry.npmjs.org"] },
+        signal,
+      }),
+    context,
+  );
   try {
     const files = await Promise.all(
       ["package.json", "package-lock.json", "runner.cjs"].map(async (name) => ({
@@ -45,23 +55,30 @@ async function runtimeSandbox(signal?: AbortSignal) {
       })),
     );
     await sandbox.writeFiles(files);
-    const install = await sandbox.runCommand({
-      cmd: "npm",
-      args: ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
-      cwd: ROOT,
-      timeoutMs: 60_000,
-      signal,
-    });
-    if (install.exitCode !== 0)
-      throw new Error(
-        "Sandbox dependency installation failed: " +
-          (await install.stderr()).slice(-2000),
-      );
+    await timedStage(
+      "sandbox-dependencies",
+      async () => {
+        const install = await sandbox.runCommand({
+          cmd: "npm",
+          args: ["ci", "--ignore-scripts", "--no-audit", "--no-fund"],
+          cwd: ROOT,
+          timeoutMs: buildTimeout ?? 60_000,
+          signal,
+        });
+        if (install.exitCode !== 0)
+          throw new Error(
+            "Sandbox dependency installation failed: " +
+              (await install.stderr()).slice(-2000),
+          );
+      },
+      context,
+    );
     await sandbox.updateNetworkPolicy("deny-all");
     await sandbox.runCommand({
       cmd: "mkdir",
       args: ["-p", `${ROOT}/job`],
-      timeoutMs: 5000,
+      timeoutMs: buildTimeout ?? 5000,
+      signal,
     });
     return sandbox;
   } catch (error) {
@@ -70,8 +87,13 @@ async function runtimeSandbox(signal?: AbortSignal) {
   }
 }
 
-async function run(sandbox: Sandbox, mode: string, signal?: AbortSignal) {
-  // Linux file-size limit covers Sharp's native writes too. SDK kills the process at 15s.
+async function run(
+  sandbox: Sandbox,
+  mode: string,
+  signal?: AbortSignal,
+  context?: Record<string, unknown>,
+) {
+  // Linux file-size limit covers Sharp's native writes too. Builds share the overall deadline.
   let bytes = 0;
   let logs = "";
   const sink = new Writable({
@@ -90,7 +112,7 @@ async function run(sandbox: Sandbox, mode: string, signal?: AbortSignal) {
       mode,
     ],
     cwd: ROOT,
-    timeoutMs: 15_000,
+    timeoutMs: context ? BUILD_TIMEOUT_MS : 15_000,
     signal,
     stdout: sink,
     stderr: sink,
@@ -107,9 +129,10 @@ export async function executeTool(
   spec: Proposal,
   input: Buffer,
   signal?: AbortSignal,
+  context?: Record<string, unknown>,
 ) {
   if (input.length > MAX_FILE_BYTES) throw new Error("Input exceeds 10 MB.");
-  const sandbox = await runtimeSandbox(signal);
+  const sandbox = await runtimeSandbox(signal, context);
   try {
     await sandbox.writeFiles([
       { path: ROOT + "/job/tool.cjs", content: Buffer.from(code) },
@@ -119,7 +142,7 @@ export async function executeTool(
       },
       { path: ROOT + "/job/input.png", content: input },
     ]);
-    await run(sandbox, "execute", signal);
+    await run(sandbox, "execute", signal, context);
     const result = await sandbox.readFileToBuffer({
       path: ROOT + "/job/output.png",
     });
@@ -142,9 +165,10 @@ export async function testTool(
   tests: string,
   spec: Proposal,
   signal?: AbortSignal,
+  context?: Record<string, unknown>,
 ): Promise<Tool["testReport"]> {
   const results: Tool["testReport"]["results"] = [];
-  const sandbox = await runtimeSandbox(signal);
+  const sandbox = await runtimeSandbox(signal, context);
   try {
     const width = 7,
       height = 5;
@@ -168,7 +192,11 @@ export async function testTool(
       { path: ROOT + "/job/input.png", content: fixture },
     ]);
     try {
-      await run(sandbox, "tests", signal);
+      await timedStage(
+        "sandbox-tests",
+        () => run(sandbox, "tests", signal, context),
+        context,
+      );
       results.push({ name: "Model tests (Sandbox exit 0)", passed: true });
     } catch (error) {
       results.push({
@@ -180,7 +208,11 @@ export async function testTool(
     await sandbox.stop();
     try {
       // Fresh microVM: generated tests cannot alter the module, fixture or trusted runner.
-      const output = await executeTool(code, spec, fixture, signal);
+      const output = await timedStage(
+        "independent-tests",
+        () => executeTool(code, spec, fixture, signal, context),
+        context,
+      );
       if (!output || output.length > MAX_FILE_BYTES)
         throw new Error("Missing/oversized output.");
       const metadata = await sharp(output, {

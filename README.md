@@ -82,9 +82,16 @@ Linux native packages. Each Sandbox uploads these files and runs `npm ci
 then sets `deny-all` before any generated code is uploaded/executed. No application
 secrets or environment variables are passed to Sandbox. Sandboxes are nonpersistent
 and stopped in finally. Limits: 1 vCPU / 2 GB VM RAM, 256 MB JavaScript heap,
-120-second Sandbox lifetime, 60-second install, 15-second command, 10 MB input/output,
-16,777,216 decoded pixels; build has a 270-second overall abort budget and the
-Vercel route declares maxDuration 300 (deployment plan must support this).
+120-second Sandbox lifetime, 60-second dependency install and 15-second command for
+installed tool execution, 10 MB input/output, 16,777,216 decoded pixels. During a
+build, OpenAI requests, Sandbox lifetime and commands allow 750 seconds, sharing
+one 750-second overall abort budget across all attempts. Database lock and statement
+timeouts are 750 seconds, with an 800-second idle transaction timeout. The
+Vercel route declares maxDuration 800 (deployment plan must support this).
+
+Server logs labeled `Tool build timing` record `stage`, `durationMs`, `outcome`,
+`buildId` and `attempt` for generation, Sandbox startup, dependency installation,
+tests and tool installation, including failed operations.
 
 Model tests run in one microVM. Independent verification uses a fresh microVM and a
 trusted colored RGBA fixture; the server decodes the returned PNG and checks format,

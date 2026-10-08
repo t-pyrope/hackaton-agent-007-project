@@ -4,7 +4,7 @@ import { verifyProposal } from "@/lib/proposals";
 import { readJson, sameOrigin } from "@/lib/request";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+export const maxDuration = 800;
 
 export async function POST(request: Request) {
   try {

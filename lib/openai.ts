@@ -1,5 +1,6 @@
 import "server-only";
 import OpenAI from "openai";
+import { BUILD_TIMEOUT_MS } from "./build-timing";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -159,7 +160,7 @@ export async function generateTool(
   if (!apiKey) throw new ChatError("Set OPENAI_API_KEY on the server.", 503);
   const response = await new OpenAI({
     apiKey,
-    timeout: 60_000,
+    timeout: BUILD_TIMEOUT_MS,
     maxRetries: 0,
   }).responses.create(
     {
