@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { AppHeader } from "@/app/AppHeader";
-import { Icon } from "@/app/components/Icon";
 import { Tool } from "@/app/types";
 import { MainTool } from "@/app/MainTool";
 import { Sidebar } from "@/app/Sidebar";

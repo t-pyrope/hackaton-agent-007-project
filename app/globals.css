@@ -60,10 +60,15 @@ button svg {
 .app {
   max-width: 1600px;
   margin: auto;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   /*padding: 0 40px;*/
 }
 .topbar {
   height: 100px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -166,8 +171,22 @@ h1 > span {
 .workspace {
   display: grid;
   grid-template-columns: 235px minmax(0, 1fr) 335px;
+  grid-template-rows: minmax(0, 1fr);
+  flex: 1;
   overflow: hidden;
-  min-height: 672px;
+  min-height: 0;
+}
+.tool-panel,
+.editor,
+.agent-panel {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.tool-panel > *,
+.agent-panel > * {
+  flex-shrink: 0;
 }
 .tool-panel {
   padding: 27px 18px;
@@ -796,6 +815,7 @@ textarea::placeholder {
   }
   .workspace {
     grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
   }
   .agent-panel {
     grid-column: 1/-1;
@@ -827,6 +847,7 @@ textarea::placeholder {
   }
   .chat-closed {
     grid-template-columns: 200px minmax(0, 1fr) 60px;
+    grid-template-rows: minmax(0, 1fr);
   }
   .download {
     padding: 13px;
@@ -886,8 +907,9 @@ textarea::placeholder {
   }
   .workspace,
   .workspace.chat-closed {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 2fr);
     min-height: 0;
   }
   .tool-panel {
