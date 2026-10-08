@@ -208,7 +208,12 @@ export const Chat = ({
                   ? ` · ${proposal.spec.angle}° clockwise`
                   : ""}
             </p>
-            <button className="primary" disabled={busy} onClick={build}>
+            <button
+              className="primary"
+              style={{ marginTop: 20 }}
+              disabled={busy}
+              onClick={build}
+            >
               Confirm &amp; Build
             </button>
           </div>
