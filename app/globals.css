@@ -74,6 +74,7 @@ button svg {
   justify-content: space-between;
   border-bottom: 1px solid var(--line);
   gap: 24px;
+  padding-inline: 20px;
 }
 .brand {
   display: flex;
