@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Icon } from "@/app/components/Icon";
+import { Icon } from "@/components/Icon";
 import { useEffect, useRef, useState } from "react";
 import { Tool } from "@/app/types";
 

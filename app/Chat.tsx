@@ -1,6 +1,6 @@
 import { Dispatch, SetStateAction, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Icon } from "@/app/components/Icon";
+import { Icon } from "@/components/Icon";
 import { Tool } from "@/app/types";
 import type { ConfirmableProposal, BuildStatus } from "@/lib/tool-contract";
 
@@ -14,12 +14,21 @@ export const Chat = ({
 }) => {
   const [proposal, setProposal] = useState<ConfirmableProposal | null>(null);
   const [buildStatus, setBuildStatus] = useState<BuildStatus | "">("");
+  const [chat, setChat] = useState(true);
+  const [prompt, setPrompt] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
+  const textarea = useRef<HTMLTextAreaElement>(null);
+
   async function build() {
     if (!proposal || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
     setBuildStatus("");
+
     try {
       const response = await fetch("/api/tools/build", {
         method: "POST",
@@ -75,13 +84,6 @@ export const Chat = ({
       setBusy(false);
     }
   }
-  const [chat, setChat] = useState(true);
-  const [prompt, setPrompt] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const inFlight = useRef(false);
-  const textarea = useRef<HTMLTextAreaElement>(null);
 
   async function send() {
     if (!prompt.trim() || inFlight.current) return;
@@ -97,6 +99,7 @@ export const Chat = ({
     setBuildStatus("");
     setMessages(history);
     setPrompt("");
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",

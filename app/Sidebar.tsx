@@ -1,4 +1,4 @@
-import { Icon } from "@/app/components/Icon";
+import { Icon } from "@/components/Icon";
 import { Tool } from "@/app/types";
 
 export const Sidebar = ({

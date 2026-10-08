@@ -6,8 +6,6 @@ type Result = {
   url: string;
   size: number;
   originalSize: number;
-  width: number;
-  height: number;
   noReduction: boolean;
 };
 const formatSize = (bytes: number) =>
@@ -20,8 +18,6 @@ const formatSize = (bytes: number) =>
 export default function CompressPng() {
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState("");
-  const [mode, setMode] = useState<"lossless" | "smaller">("lossless");
-  const [quality, setQuality] = useState(80);
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
@@ -66,9 +62,11 @@ export default function CompressPng() {
     urls.current.source = url;
     setSource(url);
     setFile(next);
+    void compress(next);
   }
-  async function compress() {
-    if (!file || request.current) return;
+
+  async function compress(next: File) {
+    if (request.current) return;
     const controller = new AbortController();
     request.current = controller;
     setProcessing(true);
@@ -76,9 +74,8 @@ export default function CompressPng() {
     clearResult();
     try {
       const form = new FormData();
-      form.append("file", file);
-      form.append("mode", mode);
-      if (mode === "smaller") form.append("quality", String(quality));
+      form.append("file", next);
+      form.append("mode", "lossless");
       const response = await fetch("/api/image-tools/compress-png", {
         method: "POST",
         body: form,
@@ -96,8 +93,6 @@ export default function CompressPng() {
         url,
         size: blob.size,
         originalSize: Number(response.headers.get("X-Original-Size")),
-        width: Number(response.headers.get("X-Image-Width")),
-        height: Number(response.headers.get("X-Image-Height")),
         noReduction: response.headers.get("X-No-Reduction") === "true",
       });
     } catch (error) {
@@ -114,6 +109,7 @@ export default function CompressPng() {
       }
     }
   }
+
   return (
     <section aria-label="Compress PNG" aria-busy={processing}>
       <div className="editor-heading">
@@ -145,164 +141,115 @@ export default function CompressPng() {
           load(event.dataTransfer.files);
         }}
       >
-        {file ? (
-          <>
-            <div className="file-heading">
-              <span>{file.name}</span>
+        <button
+          className="upload-trigger"
+          onClick={() => input.current?.click()}
+          disabled={processing}
+        >
+          <span className="upload-art">
+            <span className="photo-back" />
+            <span className="photo-front">
+              <svg viewBox="0 0 80 65" fill="none" aria-hidden="true">
+                <rect
+                  x="1"
+                  y="1"
+                  width="78"
+                  height="63"
+                  rx="8"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+                <circle cx="56" cy="19" r="7" fill="currentColor" />
+                <path
+                  d="m8 54 21-25 17 19 9-10 17 16"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                />
+              </svg>
+              <span className="upload-plus">+</span>
+            </span>
+          </span>
+          <h3>Upload PNG</h3>
+          <p>
+            Drop one PNG here or <u>browse files</u>
+          </p>
+          <span className="file-types">
+            Static PNG · Up to 10 MB · Up to 25 MP
+          </span>
+        </button>
+      </div>
+      <div aria-live="polite" role="status">
+        {file && (
+          <div className="compression-result">
+            <img
+              className="compression-thumbnail"
+              src={result?.url || source}
+              alt={result ? "Compressed PNG preview" : "Original PNG preview"}
+            />
+            <div className="compression-file">
+              <strong title={file.name}>{file.name}</strong>
+              <div className="compression-file-meta">
+                <span className="compression-format">PNG</span>
+                <span>{formatSize(result?.originalSize ?? file.size)}</span>
+              </div>
+            </div>
+            {processing && (
+              <span className="compression-status">Compressing…</span>
+            )}
+            {result && (
+              <>
+                <div className="compression-savings">
+                  <strong>
+                    {result.noReduction
+                      ? "0%"
+                      : `−${((1 - result.size / result.originalSize) * 100).toFixed(0)}%`}
+                  </strong>
+                  <span>{formatSize(result.size)}</span>
+                </div>
+                <a
+                  className="compression-download"
+                  href={result.url}
+                  download={`${file.name.replace(/\.[^.]+$/, "") || "image"}-compressed.png`}
+                  aria-label={`Download compressed ${file.name}`}
+                >
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  PNG
+                </a>
+              </>
+            )}
+            {error && !processing && (
               <button
                 className="text-button"
-                disabled={processing}
-                onClick={() => input.current?.click()}
+                onClick={() => void compress(file)}
               >
-                Upload PNG
+                Try again
               </button>
-            </div>
-            <img
-              className="png-preview"
-              src={source}
-              alt="Original PNG preview"
-              onError={() =>
-                setError(
-                  "This file cannot be previewed. Compress PNG will validate its contents.",
-                )
-              }
-            />
-          </>
-        ) : (
-          <button
-            className="upload-trigger"
-            onClick={() => input.current?.click()}
-            disabled={processing}
-          >
-            <span className="upload-art">
-              <span className="photo-back" />
-              <span className="photo-front">
-                <svg viewBox="0 0 80 65" fill="none" aria-hidden="true">
-                  <rect
-                    x="1"
-                    y="1"
-                    width="78"
-                    height="63"
-                    rx="8"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <circle cx="56" cy="19" r="7" fill="currentColor" />
-                  <path
-                    d="m8 54 21-25 17 19 9-10 17 16"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                </svg>
-                <span className="upload-plus">+</span>
-              </span>
-            </span>
-            <h3>Upload PNG</h3>
-            <p>
-              Drop one PNG here or <u>browse files</u>
-            </p>
-            <span className="file-types">
-              Static PNG · Up to 10 MB · Up to 25 MP
-            </span>
-          </button>
+            )}
+          </div>
         )}
-      </div>
-      <div className="compression-controls">
-        <div className="section-label">Compression settings</div>
-        <div className="controls-grid">
-          <label>
-            Mode
-            <select
-              disabled={processing}
-              value={mode}
-              onChange={(event) => {
-                setMode(event.target.value as typeof mode);
-                clearResult();
-              }}
-            >
-              <option value="lossless">Lossless</option>
-              <option value="smaller">Smaller File</option>
-            </select>
-          </label>
-          {mode === "smaller" && (
-            <label>
-              Quality <span>{quality}</span>
-              <input
-                type="range"
-                min="1"
-                max="100"
-                value={quality}
-                disabled={processing}
-                onChange={(event) => {
-                  setQuality(Number(event.target.value));
-                  clearResult();
-                }}
-              />
-            </label>
-          )}
-        </div>
-        <p className="mode-description">
-          {mode === "lossless"
-            ? "Preserves pixels and transparency."
-            : "Reduces the color palette. Lower quality can create smaller files."}
-        </p>
-        <button
-          className="primary"
-          disabled={!file || processing}
-          onClick={compress}
-        >
-          {processing ? "Compressing…" : "Compress PNG"}
-        </button>
+        {result?.noReduction && (
+          <p className="no-reduction">No size reduction</p>
+        )}
       </div>
       {error && (
         <p className="error" role="alert">
           {error}
         </p>
       )}
-      <div aria-live="polite" role="status">
-        {processing && (
-          <p className="processing-message">Uploading and compressing PNG…</p>
-        )}
-        {result && (
-          <>
-            <div className="result-preview">
-              <h3>Preview</h3>
-              <img
-                className="png-preview"
-                src={result.url}
-                alt="Compressed PNG preview"
-              />
-              <p>
-                {result.width} × {result.height} px · PNG
-              </p>
-            </div>
-            <div className="size-summary">
-              <p>
-                Original size <strong>{formatSize(result.originalSize)}</strong>
-              </p>
-              <p>
-                Final size <strong>{formatSize(result.size)}</strong>
-              </p>
-              <p>
-                Savings{" "}
-                <strong>
-                  {((1 - result.size / result.originalSize) * 100).toFixed(1)}%
-                </strong>
-              </p>
-            </div>
-            {result.noReduction && (
-              <p className="no-reduction">No size reduction</p>
-            )}
-            <a
-              className="primary"
-              href={result.url}
-              download={`${file?.name.replace(/\.[^.]+$/, "") || "image"}-compressed.png`}
-            >
-              Download PNG
-            </a>
-          </>
-        )}
-      </div>
       <p className="editor-foot compression-foot">
         Uploaded to the server for compression. Images are not stored.
       </p>

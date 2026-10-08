@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AppHeader } from "@/app/AppHeader";
 import { Tool } from "@/app/types";
-import { MainTool } from "@/app/MainTool";
+import { ActiveTool } from "@/app/ActiveTool";
 import { Sidebar } from "@/app/Sidebar";
 import { Chat } from "@/app/Chat";
 
@@ -42,7 +42,7 @@ export default function Home() {
           activeTool={activeTool}
           tools={tools}
         />
-        <MainTool activeTool={activeTool} tools={tools} />
+        <ActiveTool activeTool={activeTool} tools={tools} />
         <Chat tools={tools} setTools={setTools} />
       </div>
     </div>

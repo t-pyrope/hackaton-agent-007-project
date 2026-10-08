@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import CompressPng from "@/components/image-tools/CompressPng";
 import type { Tool } from "./types";
-export const MainTool = ({
+
+export const ActiveTool = ({
   activeTool,
   tools,
 }: {
@@ -26,6 +27,7 @@ export const MainTool = ({
     </main>
   );
 };
+
 function InstalledTool({ tool }: { tool: Tool }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -33,12 +35,14 @@ function InstalledTool({ tool }: { tool: Tool }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
+
   useEffect(
     () => () => {
       if (result) URL.revokeObjectURL(result);
     },
     [result],
   );
+
   async function run() {
     if (!file || busy) return;
     setBusy(true);
