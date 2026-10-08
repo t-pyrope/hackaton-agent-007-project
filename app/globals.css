@@ -739,34 +739,16 @@ textarea::placeholder {
   color: #a4392c;
   margin-top: 12px;
 }
-.build-card {
-  padding: 16px;
-  background: #f0f5e7;
-  border: 1px solid #dce5cc;
-  border-radius: 10px;
-  margin-top: 20px;
-}
-.request-message {
+.chat-message {
   overflow-wrap: anywhere;
-  line-height: 1.5;
 }
-.build-stages {
-  display: grid;
-  gap: 12px;
-  margin-top: 18px;
+.chat-message p {
+  white-space: pre-wrap;
+  margin-top: 6px;
 }
-.build-stages > div {
-  display: flex;
-  gap: 10px;
-  color: #a1a695;
-}
-.build-stages .reached {
-  color: #405729;
-}
-.installed-note {
-  margin-top: 18px;
-  line-height: 1.5;
-  color: #577333;
+.chat-message-user {
+  background: #f0f5e7;
+  border-radius: 12px 0 12px 12px;
 }
 .mock-notice {
   background: #f0f5e7;

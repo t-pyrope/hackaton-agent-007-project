@@ -1,46 +1,69 @@
-import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
+import { Dispatch, SetStateAction, useRef, useState } from "react";
 import { Icon } from "@/app/components/Icon";
 import { Tool } from "@/app/types";
 
-const stages = ["Writing Code", "Testing", "Fixing", "Installed"];
+type Message = { role: "user" | "assistant"; content: string };
 
-export const Chat = ({
-  tools,
-  setTools,
-}: {
-  tools: Tool[];
-  setTools: Dispatch<SetStateAction<Tool[]>>;
-}) => {
+export const Chat = (
+  {
+    // Reserved for future tool integration.
+  }: {
+    tools: Tool[];
+    setTools: Dispatch<SetStateAction<Tool[]>>;
+  },
+) => {
   const [chat, setChat] = useState(true);
   const [prompt, setPrompt] = useState("");
-  const [stage, setStage] = useState(-1);
-  const [request, setRequest] = useState("");
-
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const inFlight = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
 
-  function send() {
-    if (!prompt.trim() || busy || tools.length >= 10) return;
-    setRequest(prompt.trim());
+  async function send() {
+    if (!prompt.trim() || inFlight.current) return;
+    const draft = prompt;
+    const history: Message[] = [
+      ...messages,
+      { role: "user", content: draft.trim() },
+    ];
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    setMessages(history);
     setPrompt("");
-    setStage(0);
-  }
-
-  const busy = stage >= 0 && stage < 3;
-  useEffect(() => {
-    if (!busy) return;
-    const timer = setTimeout(() => {
-      if (stage === 2) {
-        const name =
-          request
-            .trim()
-            .replace(/[.!?]+$/, "")
-            .slice(0, 38) || "Custom Tool";
-        setTools((old) => [...old, { name, request }]);
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: history }),
+        signal: AbortSignal.timeout(90_000),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(
+          typeof data.error === "string"
+            ? data.error
+            : "Victor could not reply. Please try again.",
+        );
       }
-      setStage(stage + 1);
-    }, 1300);
-    return () => clearTimeout(timer);
-  }, [stage, busy, request]);
+      if (typeof data.message !== "string" || !data.message.trim()) {
+        throw new Error("Victor returned an empty reply. Please try again.");
+      }
+      setMessages([...history, { role: "assistant", content: data.message }]);
+    } catch (failure) {
+      setMessages(messages);
+      setPrompt(draft);
+      setError(
+        failure instanceof Error && failure.name === "Error"
+          ? failure.message
+          : "Could not reach Victor. Please try again. Your text has been kept.",
+      );
+    } finally {
+      inFlight.current = false;
+      setBusy(false);
+    }
+  }
 
   return chat ? (
     <aside className="agent-panel">
@@ -63,14 +86,14 @@ export const Chat = ({
           <Icon name="spark" size={30} />
         </div>
         <h3>Got a tool in mind?</h3>
-        <p>Tell me what you need. I’ll build a new tool for you.</p>
+        <p>Tell me what you need. Let’s plan an image tool together.</p>
         <div className="message">
           Try something like “add a tool to remove backgrounds” or “make my
           images black and white”.
         </div>
         <div className="suggestions">
           <button
-            disabled={busy || tools.length >= 10}
+            disabled={busy}
             onClick={() => {
               setPrompt("Remove Background");
               textarea.current?.focus();
@@ -79,7 +102,7 @@ export const Chat = ({
             Remove background <span>↗</span>
           </button>
           <button
-            disabled={busy || tools.length >= 10}
+            disabled={busy}
             onClick={() => {
               setPrompt("Black & White");
               textarea.current?.focus();
@@ -88,25 +111,24 @@ export const Chat = ({
             Make it black & white <span>↗</span>
           </button>
         </div>
-        {stage >= 0 && (
-          <div className="build-card">
-            <p className="request-message">“{request}”</p>
-            <div className="build-stages">
-              {stages.map((s, i) => (
-                <div key={s} className={stage >= i ? "reached" : ""}>
-                  <span>
-                    {stage > i || stage === 3 ? "✓" : stage === i ? "◌" : "○"}
-                  </span>
-                  {s}
-                </div>
-              ))}
-            </div>
-            {stage === 3 && (
-              <p className="installed-note">
-                Your tool is installed. A new part is alive!
-              </p>
-            )}
+        {messages.map((message, index) => (
+          <div
+            className={`message chat-message chat-message-${message.role}`}
+            key={index}
+          >
+            <strong>{message.role === "user" ? "You" : "Victor"}</strong>
+            <p>{message.content}</p>
           </div>
+        ))}
+        {busy && (
+          <div className="message" role="status">
+            Victor is thinking…
+          </div>
+        )}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
         )}
       </div>
       <form
@@ -120,20 +142,14 @@ export const Chat = ({
           ref={textarea}
           aria-label="Describe the tool you want to add"
           placeholder="Describe the tool you want to add…"
+          maxLength={8000}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          disabled={busy || tools.length >= 10}
+          disabled={busy}
         />
         <div>
-          <span>
-            {tools.length >= 10
-              ? "Your creation is complete!"
-              : "A little imagination goes a long way."}
-          </span>
-          <button
-            className="primary"
-            disabled={!prompt.trim() || busy || tools.length >= 10}
-          >
+          <span>A little imagination goes a long way.</span>
+          <button className="primary" disabled={!prompt.trim() || busy}>
             Send <Icon name="arrow" size={18} />
           </button>
         </div>
