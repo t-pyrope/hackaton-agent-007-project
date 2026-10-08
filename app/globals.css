@@ -538,7 +538,7 @@ input[type="range"] {
   display: flex;
   flex-direction: column;
   background: #fcfdf9;
-  width: 335px;
+  width: 100%;
 }
 
 .agent-heading {

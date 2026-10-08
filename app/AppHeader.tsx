@@ -110,7 +110,7 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
           frankenframe<span className="brand-dot">.</span>
         </Link>
         <button className="collection" onClick={() => setModal(true)}>
-          <span className="mini-face">⊞</span> My Frankenstein · {tools.length}
+          <span className="mini-face">⊞</span> My Creature · {tools.length}
           /10 <Icon name="arrow" size={18} />
         </button>
       </header>
@@ -127,7 +127,7 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
           <div className="eyebrow">PIECE BY PIECE</div>
           <button
             className="icon-button"
-            aria-label="Close My Frankenstein"
+            aria-label="Close My Creature"
             onClick={() => setModal(false)}
           >
             <Icon name="close" />

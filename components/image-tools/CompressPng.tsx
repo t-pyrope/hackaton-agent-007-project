@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element -- Previews use local object URLs. */
 import { useEffect, useRef, useState } from "react";
+import ImageUpload from "./ImageUpload";
 
 type Result = {
   url: string;
@@ -21,8 +22,6 @@ export default function CompressPng() {
   const [result, setResult] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
   const urls = useRef<{ source?: string; result?: string }>({});
   const request = useRef<AbortController | null>(null);
   useEffect(
@@ -117,67 +116,15 @@ export default function CompressPng() {
           <h2>Compress PNG</h2>
         </div>
       </div>
-      <input
-        ref={input}
-        type="file"
+      <ImageUpload
         accept="image/png,.png"
-        hidden
-        disabled={processing}
-        onChange={(event) => {
-          load(event.target.files);
-          event.target.value = "";
-        }}
+        title="Upload PNG"
+        description="Drop one PNG here or"
+        fileTypes="Static PNG · Up to 10 MB · Up to 25 MP"
+        processing={processing}
+        hasImage={!!file}
+        onFiles={load}
       />
-      <div
-        className={`upload ${dragging ? "dragging" : ""} ${file ? "has-image" : ""}`}
-        onDragOver={(event) => {
-          event.preventDefault();
-          if (!processing) setDragging(true);
-        }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setDragging(false);
-          load(event.dataTransfer.files);
-        }}
-      >
-        <button
-          className="upload-trigger"
-          onClick={() => input.current?.click()}
-          disabled={processing}
-        >
-          <span className="upload-art">
-            <span className="photo-back" />
-            <span className="photo-front">
-              <svg viewBox="0 0 80 65" fill="none" aria-hidden="true">
-                <rect
-                  x="1"
-                  y="1"
-                  width="78"
-                  height="63"
-                  rx="8"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-                <circle cx="56" cy="19" r="7" fill="currentColor" />
-                <path
-                  d="m8 54 21-25 17 19 9-10 17 16"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-              </svg>
-              <span className="upload-plus">+</span>
-            </span>
-          </span>
-          <h3>Upload PNG</h3>
-          <p>
-            Drop one PNG here or <u>browse files</u>
-          </p>
-          <span className="file-types">
-            Static PNG · Up to 10 MB · Up to 25 MP
-          </span>
-        </button>
-      </div>
       <div aria-live="polite" role="status">
         {file && (
           <div className="compression-result">
@@ -250,9 +197,6 @@ export default function CompressPng() {
           {error}
         </p>
       )}
-      <p className="editor-foot compression-foot">
-        Uploaded to the server for compression. Images are not stored.
-      </p>
     </section>
   );
 }

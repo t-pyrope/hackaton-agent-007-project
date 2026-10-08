@@ -35,15 +35,20 @@ export const Chat = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: proposal.token, confirmed: true }),
       });
+
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Build failed.");
       }
+
       const reader = response.body?.getReader();
+
       if (!reader) throw new Error("Missing build response.");
+
       const decoder = new TextDecoder();
       let pending = "";
       let installed = false;
+
       while (true) {
         const { done, value } = await reader.read();
         pending += decoder.decode(value, { stream: !done });
@@ -242,7 +247,6 @@ export const Chat = ({
           disabled={busy}
         />
         <div>
-          <span>A little imagination goes a long way.</span>
           <button className="primary" disabled={!prompt.trim() || busy}>
             Send <Icon name="arrow" size={18} />
           </button>
