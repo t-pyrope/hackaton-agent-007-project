@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { tools } from "@/db/schema";
 import { executeTool, MAX_FILE_BYTES } from "@/lib/sandbox";
 import { validateCode } from "@/lib/generated-validation";
-import { validateProposal } from "@/lib/tool-contract";
+import { validateProposal, validateParameterValue } from "@/lib/tool-contract";
 import { sameOrigin } from "@/lib/request";
 
 export const runtime = "nodejs";
@@ -47,6 +47,27 @@ export async function POST(request: Request) {
     for (const p of tool.uiSchema.parameters) {
       const value = form.get(p.id);
       if (value !== null) {
+        if (spec.operation === "custom") {
+          if (typeof value !== "string")
+            throw new Error("Invalid tool settings.");
+          const parameter = spec.parameters.find(
+            (setting) => setting.id === p.id,
+          );
+          if (!parameter) throw new Error("Unknown tool setting.");
+          let parsed: string | number | boolean = value;
+          if (parameter.type === "number" || parameter.type === "slider") {
+            if (!value.trim()) throw new Error("Invalid tool settings.");
+            parsed = Number(value);
+          }
+          if (parameter.type === "boolean") {
+            if (!["true", "false"].includes(value))
+              throw new Error("Invalid tool settings.");
+            parsed = value === "true";
+          }
+          validateParameterValue(parameter, parsed);
+          parameter.default = parsed;
+          continue;
+        }
         const n = Number(value);
         if (
           !Number.isInteger(n) ||

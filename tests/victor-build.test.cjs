@@ -201,3 +201,154 @@ test("Database failure never triggers code repairs", async () => {
   assert.equal(h.state().generations, 1);
   assert.equal(h.state().committed, false);
 });
+
+const customSpec = {
+  name: "Blur",
+  description: "Gaussian blur with sigma; preserve alpha.",
+  operation: "custom",
+  outputFormat: "png",
+  parameters: [
+    {
+      id: "sigma",
+      type: "number",
+      label: "Blur strength",
+      default: 2,
+      min: 0.3,
+      max: 100,
+      options: null,
+    },
+  ],
+};
+test("Custom algorithm proposals and confirmed UI settings", () => {
+  assert.deepEqual(validateProposal(customSpec), customSpec);
+  const ui = {
+    inputs: [{ id: "image", type: "image", required: true }],
+    parameters: [
+      {
+        id: "sigma",
+        type: "number",
+        label: "Blur strength",
+        default: 2,
+        min: 0.3,
+        max: 100,
+      },
+    ],
+    output: { type: "image" },
+  };
+  assert.deepEqual(validateUiSchema(JSON.stringify(ui), customSpec), ui);
+  for (const changes of [
+    { default: 200 },
+    { min: 3 },
+    { type: "invalid" },
+    { id: "constructor" },
+  ]) {
+    assert.throws(() =>
+      validateProposal({
+        ...customSpec,
+        parameters: [{ ...customSpec.parameters[0], ...changes }],
+      }),
+    );
+  }
+  assert.throws(() =>
+    validateProposal({
+      ...customSpec,
+      parameters: customSpec.parameters.concat(customSpec.parameters),
+    }),
+  );
+  assert.throws(() => validateProposal({ ...customSpec, outputFormat: "gif" }));
+  assert.throws(() =>
+    validateUiSchema(
+      JSON.stringify({
+        ...ui,
+        parameters: [{ ...ui.parameters[0], default: 3 }],
+      }),
+      customSpec,
+    ),
+  );
+  assert.deepEqual(
+    validateProposal({ ...customSpec, parameters: [] }).parameters,
+    [],
+  );
+});
+
+test("Custom settings validate all supported UI types", () => {
+  const { validateParameterValue } = load("lib/tool-contract.ts");
+  for (const [type, value, invalid, options] of [
+    ["number", 0.5, NaN, null],
+    ["slider", 0.5, 2, null],
+    ["boolean", true, "true", null],
+    ["text", "caption", 3, null],
+    ["color", "#123456", "red", null],
+    ["select", "a", "b", [{ label: "A", value: "a" }]],
+  ]) {
+    const p = {
+      id: "setting",
+      label: "Setting",
+      type,
+      default: value,
+      min: type === "number" || type === "slider" ? 0 : null,
+      max: type === "number" || type === "slider" ? 1 : null,
+      options,
+    };
+    validateProposal({ ...customSpec, parameters: [p] });
+    assert.doesNotThrow(() => validateParameterValue(p, value));
+    assert.throws(() => validateParameterValue(p, invalid));
+  }
+});
+
+test("Pixel loops allow coerced numeric indices while rejecting dynamic property names", () => {
+  validateCode(
+    "module.exports=async function(){const pixels=Buffer.alloc(16);for(let i=0;i<pixels.length;i++){pixels[+i]=255-pixels[+(i+1)];}}",
+  );
+  for (const code of [
+    "pixels[i]",
+    "pixels['constructor']",
+    "pixels[name]",
+    "pixels[+process.env]",
+    "x[+i].constructor",
+  ])
+    assert.throws(() => validateCode(code));
+});
+
+test("Custom sandbox checks format without assuming unchanged pixels or dimensions", async () => {
+  const sharp = require("sharp");
+  const output = await sharp({
+    create: {
+      width: 3,
+      height: 2,
+      channels: 4,
+      background: { r: 10, g: 20, b: 30, alpha: 0.5 },
+    },
+  })
+    .png()
+    .toBuffer();
+  let creates = 0;
+  const { testTool } = load("lib/sandbox.ts", {
+    "@vercel/sandbox": {
+      Sandbox: {
+        create: async () => {
+          creates++;
+          return {
+            status: "running",
+            writeFiles: async () => {},
+            runCommand: async () => ({ exitCode: 0 }),
+            updateNetworkPolicy: async () => {},
+            readFileToBuffer: async () => output,
+            stop: async () => {},
+          };
+        },
+      },
+    },
+  });
+  const report = await testTool("unused", "unused", customSpec);
+  assert.equal(report.passed, true);
+  assert.equal(creates, 2);
+  assert(
+    report.results.some(
+      (r) => r.name === "Custom effect checked by model tests only",
+    ),
+  );
+  const legacy = await testTool("unused", "unused", spec);
+  assert.equal(legacy.passed, false);
+  assert(legacy.results.some((r) => r.error?.includes("dimensions")));
+});

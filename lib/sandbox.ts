@@ -125,6 +125,12 @@ export async function executeTool(
     });
     if (!result || result.length > MAX_FILE_BYTES)
       throw new Error("Missing or oversized output.");
+    const metadata = await sharp(result, {
+      limitInputPixels: 16777216,
+    }).metadata();
+    if (metadata.format !== "png" || (metadata.pages || 1) !== 1)
+      throw new Error("Output must be one static PNG.");
+    await sharp(result, { limitInputPixels: 16777216 }).raw().toBuffer();
     return result;
   } finally {
     if (sandbox.status !== "stopped") await sandbox.stop();
@@ -185,6 +191,14 @@ export async function testTool(
         name: "Independent PNG decoding and file limit",
         passed: true,
       });
+      if (spec.operation === "custom") {
+        // Arbitrary algorithms have no trusted universal pixel oracle.
+        results.push({
+          name: "Custom effect checked by model tests only",
+          passed: true,
+        });
+        return { passed: results.every((r) => r.passed), results };
+      }
       const actual = await sharp(output, { limitInputPixels: 16777216 })
         .ensureAlpha()
         .raw()

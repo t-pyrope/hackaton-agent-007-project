@@ -117,7 +117,7 @@ function InstalledTool({ tool }: { tool: Tool }) {
           <p key={p.id}>
             <label>
               {p.label}{" "}
-              {p.type === "select" ? (
+              {p.type === "select" || p.type === "boolean" ? (
                 <select
                   disabled={busy}
                   value={values[p.id] ?? String(p.default)}
@@ -127,7 +127,13 @@ function InstalledTool({ tool }: { tool: Tool }) {
                     if (file) void run(file, nextValues);
                   }}
                 >
-                  {p.options?.map((o) => (
+                  {(p.type === "boolean"
+                    ? [
+                        { label: "Yes", value: "true" },
+                        { label: "No", value: "false" },
+                      ]
+                    : p.options
+                  )?.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
@@ -135,7 +141,20 @@ function InstalledTool({ tool }: { tool: Tool }) {
                 </select>
               ) : (
                 <input
-                  type="number"
+                  type={
+                    p.type === "slider"
+                      ? "range"
+                      : p.type === "text"
+                        ? "text"
+                        : p.type === "color"
+                          ? "color"
+                          : "number"
+                  }
+                  step={
+                    p.type === "number" || p.type === "slider"
+                      ? "any"
+                      : undefined
+                  }
                   min={p.min}
                   max={p.max}
                   disabled={busy}

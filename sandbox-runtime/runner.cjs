@@ -63,11 +63,14 @@ async function load(file, assertionLibrary = assert) {
 (async () => {
   const spec = JSON.parse(await fs.readFile("job/spec.json", "utf8"));
   const run = await load("job/tool.cjs");
-  const parameters = {
-    width: spec.width,
-    height: spec.height,
-    angle: spec.angle,
-  };
+  const parameters =
+    spec.operation === "custom"
+      ? Object.fromEntries(spec.parameters.map((p) => [p.id, p.default]))
+      : {
+          width: spec.width,
+          height: spec.height,
+          angle: spec.angle,
+        };
   if (process.argv[2] === "tests") {
     let assertions = 0;
     let executions = 0;

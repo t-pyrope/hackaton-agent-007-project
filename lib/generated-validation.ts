@@ -71,9 +71,17 @@ export function validateCode(code: string) {
       throw new Error("Computed property names are not allowed.");
     if (
       ts.isElementAccessExpression(node) &&
-      !ts.isNumericLiteral(node.argumentExpression)
+      !ts.isNumericLiteral(node.argumentExpression) &&
+      !(
+        ts.isPrefixUnaryExpression(node.argumentExpression) &&
+        [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken].includes(
+          node.argumentExpression.operator,
+        )
+      )
     )
-      throw new Error("Only literal numeric indexed access is allowed.");
+      throw new Error(
+        "Use numeric literal indices or numeric coercion, such as pixels[+i].",
+      );
     if (ts.isStringLiteral(node) && dangerous.has(node.text))
       throw new Error("Forbidden property.");
     if (ts.isIdentifier(node) && node.text === "require") {
@@ -110,6 +118,27 @@ export function validateUiSchema(
     !Array.isArray(ui.parameters)
   )
     throw new Error("UI must accept one image and return one image.");
+  if (spec.operation === "custom") {
+    const expected = spec.parameters.map(({ min, max, options, ...p }) => ({
+      ...p,
+      ...(min === null ? {} : { min }),
+      ...(max === null ? {} : { max }),
+      ...(options === null ? {} : { options }),
+    }));
+    // Canonical comparison also rejects added controls and changed defaults/ranges.
+    const canonical = (value: unknown): string => {
+      if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+      if (value && typeof value === "object")
+        return `{${Object.entries(value)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
+          .join(",")}}`;
+      return JSON.stringify(value);
+    };
+    if (canonical(ui.parameters) !== canonical(expected))
+      throw new Error("UI parameters do not match the confirmed proposal.");
+    return ui;
+  }
   const ids =
     spec.operation === "resize"
       ? ["height", "width"]

@@ -31,6 +31,11 @@ async function main() {
   const record = JSON.parse(
     fs.readFileSync("/tmp/victor-e2e-report.json", "utf8"),
   ).tool;
+  assert.notEqual(
+    record.testReport.proposal.operation,
+    "custom",
+    "This verification requires a legacy operation with an independent pixel reference.",
+  );
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   let code;
   try {
@@ -51,7 +56,7 @@ async function main() {
   );
   assert(passed.passed, JSON.stringify(passed));
   console.log(
-    "Final runner, fresh independent microVM and grayscale pixels: PASS",
+    "Final runner, fresh independent microVM and confirmed operation pixels: PASS",
   );
   const empty = await testTool(
     code,
