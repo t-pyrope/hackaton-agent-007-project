@@ -22,7 +22,6 @@ export const Sidebar = ({
         >
           <Icon name="compress" />
           <span>Compress PNG</span>
-          <span className="tool-dot" />
         </button>
         {tools.map((tool) => (
           <button
