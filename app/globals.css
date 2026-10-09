@@ -561,6 +561,7 @@ input[type="range"] {
   height: 34px;
   background: #edf3e2;
   border-radius: 9px;
+  overflow: hidden;
 }
 
 .online-dot {

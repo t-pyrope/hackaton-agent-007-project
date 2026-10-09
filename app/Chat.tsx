@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { Icon } from "@/components/Icon";
 import { Tool } from "@/app/types";
 import type { ConfirmableProposal, BuildStatus } from "@/lib/tool-contract";
+import Image from "next/image";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -156,7 +157,7 @@ export const Chat = ({
     <aside className="agent-panel">
       <div className="agent-heading">
         <span className="agent-icon">
-          <Icon name="spark" />
+          <Image src="/victor.png" width={34} height={34} alt="Victor" />
         </span>
         <h2>Victor</h2>
         <span className="online-dot" />
@@ -169,9 +170,6 @@ export const Chat = ({
         </button>
       </div>
       <div className="agent-conversation" aria-live="polite">
-        <div className="agent-avatar">
-          <Icon name="spark" size={30} />
-        </div>
         <h3>Got a tool in mind?</h3>
         <div className="message">
           Try something like “add a tool to remove backgrounds” or “make my
