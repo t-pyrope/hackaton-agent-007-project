@@ -1379,7 +1379,8 @@ textarea::placeholder {
 }
 
 .run-budget {
-  margin: 0 18px 14px;
+  grid-column: 1 / -1;
+  margin: 14px 18px 0;
   padding: 14px;
   border: 1px solid #dfe1d8;
   border-radius: 16px;

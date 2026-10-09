@@ -87,7 +87,13 @@ export const Chat = ({
           if (event.limits) setBudgetLimits(event.limits);
           if (event.error) throw new Error(event.error);
           if (event.tests)
-            setProgress((current) => [...current, ...event.tests.results.map((test: { name: string; passed: boolean; error?: string }) => `Step ${event.step}: ${test.passed ? "PASS" : "FAIL"} · ${test.name}${test.error ? " · " + test.error : ""}`)]);
+            setProgress((current) => [
+              ...current,
+              ...event.tests.results.map(
+                (test: { name: string; passed: boolean; error?: string }) =>
+                  `Step ${event.step}: ${test.passed ? "PASS" : "FAIL"} · ${test.name}${test.error ? " · " + test.error : ""}`,
+              ),
+            ]);
           if (event.status)
             setProgress((current) => [
               ...current,
@@ -166,7 +172,14 @@ export const Chat = ({
       }
       setMessages([...history, { role: "assistant", content: data.message }]);
       setPlan(data.plan || null);
-      if (data.discovery) setProgress([`Registry search v${data.discovery.version}: ${data.discovery.created ? "agent created and tested" : "reused"} · ${data.discovery.matchedIds.length} matches`, ...data.discovery.tests.attempts.map((a: { attempt: number; passed: boolean; error?: string }) => `Discovery attempt ${a.attempt}: ${a.passed ? "PASS" : "FAIL"}${a.error ? " · " + a.error : ""}`)]);
+      if (data.discovery)
+        setProgress([
+          `Registry search v${data.discovery.version}: ${data.discovery.created ? "agent created and tested" : "reused"} · ${data.discovery.matchedIds.length} matches`,
+          ...data.discovery.tests.attempts.map(
+            (a: { attempt: number; passed: boolean; error?: string }) =>
+              `Discovery attempt ${a.attempt}: ${a.passed ? "PASS" : "FAIL"}${a.error ? " · " + a.error : ""}`,
+          ),
+        ]);
     } catch (failure) {
       setMessages(messages);
       setPrompt(draft);
@@ -216,11 +229,26 @@ export const Chat = ({
           className="icon-button"
           aria-label="Collapse agent chat"
           onClick={() => setChat(false)}
+          style={{ border: "1px solid #d5d5d5", borderRadius: "2rem" }}
         >
           →
         </button>
       </div>
-      <RunBudgetCard used={budget} limits={budgetLimits} status={busy ? "Running" : error ? "Stopped" : completed ? "Completed" : budget ? "Ready" : "Per task"} />
+      <RunBudgetCard
+        used={budget}
+        limits={budgetLimits}
+        status={
+          busy
+            ? "Running"
+            : error
+              ? "Stopped"
+              : completed
+                ? "Completed"
+                : budget
+                  ? "Ready"
+                  : "Per task"
+        }
+      />
       <div className="agent-conversation" aria-live="polite">
         <h3>What would you like to do?</h3>
         <div className="message">
