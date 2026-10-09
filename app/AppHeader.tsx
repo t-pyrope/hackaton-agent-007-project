@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { useEffect, useRef, useState } from "react";
 import { Tool } from "@/app/types";
+import Image from "next/image";
 
 const parts = [
   "Head",
@@ -145,12 +146,12 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
       <header className="topbar">
         <Link className="brand" href="/" aria-label="Frankenframe home">
           <span className="brand-mark">
-            <Icon name="compress" size={26} />
+            <Image src="/logo.png" alt="logo" width={30} height={30} />
           </span>
           frankenframe<span className="brand-dot">.</span>
         </Link>
         <button className="collection" onClick={() => setModal(true)}>
-          <span className="mini-face">⊞</span> My Creature · {tools.length}
+          <span className="mini-face">⊞</span> My creature · {tools.length}
           /10 <Icon name="arrow" size={18} />
         </button>
       </header>
@@ -170,7 +171,7 @@ export const AppHeader = ({ tools }: { tools: Tool[] }) => {
           </div>
           <button
             className="icon-button"
-            aria-label="Close My Creature"
+            aria-label="Close my creature"
             onClick={() => setModal(false)}
           >
             <Icon name="close" />

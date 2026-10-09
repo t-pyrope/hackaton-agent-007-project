@@ -173,7 +173,6 @@ export const Chat = ({
           <Icon name="spark" size={30} />
         </div>
         <h3>Got a tool in mind?</h3>
-        <p>Tell me what you need. Let’s plan an image tool together.</p>
         <div className="message">
           Try something like “add a tool to remove backgrounds” or “make my
           images black and white”.
@@ -263,7 +262,11 @@ export const Chat = ({
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
               e.preventDefault();
               if (!e.repeat) e.currentTarget.form?.requestSubmit();
             }
