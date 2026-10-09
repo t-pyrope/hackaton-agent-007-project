@@ -1,4 +1,5 @@
 import "server-only";
+import { RunBudget, BudgetExceeded } from "./run-budget";
 import { BUILD_TIMEOUT_MS, timedStage } from "./build-timing";
 import { Sandbox } from "@vercel/sandbox";
 import { readFile } from "node:fs/promises";
@@ -101,10 +102,12 @@ export async function checkSandboxConnection() {
   }
 }
 
-async function runtimeSandbox(
+export async function runtimeSandbox(
   signal?: AbortSignal,
   context?: Record<string, unknown>,
+  budget?: RunBudget,
 ) {
+  budget?.sandbox();
   const buildTimeout = context ? BUILD_TIMEOUT_MS : undefined;
   const sandbox = await timedStage(
     "sandbox-start",
@@ -120,7 +123,7 @@ async function runtimeSandbox(
   );
   try {
     const files = await Promise.all(
-      ["package.json", "package-lock.json", "runner.cjs"].map(async (name) => ({
+      ["package.json", "package-lock.json", "runner.cjs", "discovery-runner.cjs"].map(async (name) => ({
         path: `${ROOT}/${name}`,
         content: await readFile(join(process.cwd(), "sandbox-runtime", name)),
       })),
@@ -201,10 +204,11 @@ export async function executeTool(
   input: Buffer | ToolInput[],
   signal?: AbortSignal,
   context?: Record<string, unknown>,
+  budget?: RunBudget,
 ) {
   const normalized = normalizeInputs(spec, input);
   const format = resolvedOutputFormat(spec);
-  const sandbox = await runtimeSandbox(signal, context);
+  const sandbox = await runtimeSandbox(signal, context, budget);
   try {
     await sandbox.writeFiles([
       { path: ROOT + "/job/tool.cjs", content: Buffer.from(code) },
@@ -242,9 +246,10 @@ export async function testTool(
   spec: Proposal,
   signal?: AbortSignal,
   context?: Record<string, unknown>,
+  budget?: RunBudget,
 ): Promise<Tool["testReport"]> {
   const results: Tool["testReport"]["results"] = [];
-  const sandbox = await runtimeSandbox(signal, context);
+  const sandbox = await runtimeSandbox(signal, context, budget);
   try {
     const width = 7,
       height = 5;
@@ -291,6 +296,7 @@ export async function testTool(
       );
       results.push({ name: "Model tests (Sandbox exit 0)", passed: true });
     } catch (error) {
+      if (error instanceof BudgetExceeded) throw error;
       results.push({
         name: "Model tests",
         passed: false,
@@ -302,7 +308,7 @@ export async function testTool(
       // Fresh microVM: generated tests cannot alter the module, fixture or trusted runner.
       const output = await timedStage(
         "independent-tests",
-        () => executeTool(code, spec, testInputs, signal, context),
+        () => executeTool(code, spec, testInputs, signal, context, budget),
         context,
       );
       if (!output || output.length > MAX_FILE_BYTES)
@@ -332,7 +338,7 @@ export async function testTool(
               p.id === "outputFormat" ? { ...p, default: option.value } : p,
             ),
           };
-          await executeTool(code, variant, testInputs, signal, context);
+          await executeTool(code, variant, testInputs, signal, context, budget);
           results.push({
             name: `Independent ${option.value.toUpperCase()} decoding and file limit`,
             passed: true,
@@ -374,6 +380,7 @@ export async function testTool(
         passed: true,
       });
     } catch (error) {
+      if (error instanceof BudgetExceeded) throw error;
       results.push({
         name: "Independent output verification",
         passed: false,

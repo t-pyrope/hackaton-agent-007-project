@@ -80,7 +80,7 @@ export function validateCode(code: string) {
       )
     )
       throw new Error(
-        "Use numeric literal indices or numeric coercion, such as pixels[+i].",
+        "Use numeric literal indices or numeric coercion, such as pixels[+i]. Invalid access: " + node.getText(ast).slice(0, 160),
       );
     if (ts.isStringLiteral(node) && dangerous.has(node.text))
       throw new Error("Forbidden property.");
@@ -93,7 +93,7 @@ export function validateCode(code: string) {
         !ts.isStringLiteral(parent.arguments[0]) ||
         !allowed.has(parent.arguments[0].text)
       )
-        throw new Error("Only the approved literal require calls are allowed.");
+        throw new Error("Only the approved literal require calls are allowed: " + parent.getText(ast).slice(0, 160));
     }
     ts.forEachChild(node, visit);
   }

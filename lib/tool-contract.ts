@@ -192,7 +192,7 @@ export function validateParameterValue(p: Parameter, value: unknown) {
       value < p.min ||
       value > p.max
     )
-      throw new Error("Invalid numeric setting.");
+      throw new Error(`Invalid numeric setting for ${p.id}: number required within ${p.min}–${p.max}; received ${JSON.stringify(value)}.`);
   } else if (p.type === "boolean") {
     if (typeof value !== "boolean") throw new Error("Invalid boolean setting.");
   } else if (

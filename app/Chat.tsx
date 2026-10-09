@@ -1,13 +1,11 @@
-import { Dispatch, SetStateAction, useRef, useState } from "react";
+import { Dispatch, SetStateAction, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Icon } from "@/components/Icon";
 import { Tool } from "@/app/types";
-import {
-  proposalInputs,
-  type ConfirmableProposal,
-  type BuildStatus,
-} from "@/lib/tool-contract";
 import Image from "next/image";
+import type { TaskPlan } from "@/lib/task-contract";
+import { RUN_LIMITS, type BudgetSnapshot } from "@/lib/run-budget";
+import { RunBudgetCard } from "@/components/RunBudgetCard";
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -17,8 +15,34 @@ export const Chat = ({
   tools: Tool[];
   setTools: Dispatch<SetStateAction<Tool[]>>;
 }) => {
-  const [proposal, setProposal] = useState<ConfirmableProposal | null>(null);
-  const [buildStatus, setBuildStatus] = useState<BuildStatus | "">("");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [plan, setPlan] = useState<TaskPlan | null>(null);
+  const [progress, setProgress] = useState<string[]>([]);
+  const [budget, setBudget] = useState<BudgetSnapshot | null>(null);
+  const [budgetLimits, setBudgetLimits] = useState<BudgetSnapshot>(RUN_LIMITS);
+  const [result, setResult] = useState<{
+    url: string;
+    filename: string;
+    reused: number;
+    created: number;
+  } | null>(null);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
+  function attach(file: File | null) {
+    setAttachment(file);
+    setPreview(file ? URL.createObjectURL(file) : "");
+  }
+  useEffect(
+    () => () => {
+      if (result) URL.revokeObjectURL(result.url);
+    },
+    [result],
+  );
   const [chat, setChat] = useState(true);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,33 +52,28 @@ export const Chat = ({
   const inFlight = useRef(false);
   const textarea = useRef<HTMLTextAreaElement>(null);
 
-  async function build() {
-    if (!proposal || inFlight.current || completed) return;
+  async function runPlan() {
+    if (!plan || !attachment || inFlight.current || completed) return;
     inFlight.current = true;
     setBusy(true);
     setError("");
-    setBuildStatus("");
-
+    setResult(null);
     try {
-      const response = await fetch("/api/tools/build", {
+      const form = new FormData();
+      form.set("image", attachment);
+      form.set("token", plan.token);
+      form.set("confirmed", "true");
+      const response = await fetch("/api/tasks/run", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: proposal.token, confirmed: true }),
+        body: form,
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Build failed.");
-      }
-
+      if (!response.ok)
+        throw new Error((await response.json()).error || "Task failed.");
       const reader = response.body?.getReader();
-
-      if (!reader) throw new Error("Missing build response.");
-
+      if (!reader) throw new Error("Missing task response.");
       const decoder = new TextDecoder();
       let pending = "";
-      let installed = false;
-
+      let finished = false;
       while (true) {
         const { done, value } = await reader.read();
         pending += decoder.decode(value, { stream: !done });
@@ -64,34 +83,44 @@ export const Chat = ({
           pending = pending.slice(end + 1);
           if (!line) continue;
           const event = JSON.parse(line);
+          if (event.budget) setBudget(event.budget);
+          if (event.limits) setBudgetLimits(event.limits);
           if (event.error) throw new Error(event.error);
-          if (event.status) setBuildStatus(event.status);
-          if (event.tool) {
-            const tool = event.tool as Tool;
+          if (event.tests)
+            setProgress((current) => [...current, ...event.tests.results.map((test: { name: string; passed: boolean; error?: string }) => `Step ${event.step}: ${test.passed ? "PASS" : "FAIL"} · ${test.name}${test.error ? " · " + test.error : ""}`)]);
+          if (event.status)
+            setProgress((current) => [
+              ...current,
+              `Step ${event.step}: ${event.status}${event.attempt ? ` (attempt ${event.attempt + 1})` : ""}`,
+            ]);
+          if (event.tool)
             setTools((current) =>
-              current.some((t) => t.id === tool.id)
+              current.some((t) => t.id === event.tool.id)
                 ? current
-                : [...current, tool],
+                : [...current, event.tool],
             );
-            installed = true;
+          if (event.result) {
+            const bytes = Uint8Array.from(atob(event.result.base64), (c) =>
+              c.charCodeAt(0),
+            );
+            setResult({
+              ...event.result,
+              url: URL.createObjectURL(
+                new Blob([bytes], { type: event.result.mime }),
+              ),
+            });
             setCompleted(true);
-            setPrompt("");
-            setProposal(null);
+            finished = true;
           }
         }
         if (done) break;
       }
-      if (!installed)
+      if (!finished)
         throw new Error(
-          "Build connection ended. Retry confirmation to recover the result.",
+          "Connection ended before a result was received. No successful execution was confirmed.",
         );
     } catch (failure) {
-      setBuildStatus("");
-      setError(
-        failure instanceof Error
-          ? failure.message
-          : "Build failed. Nothing was installed.",
-      );
+      setError(failure instanceof Error ? failure.message : "Task failed.");
     } finally {
       inFlight.current = false;
       setBusy(false);
@@ -108,8 +137,10 @@ export const Chat = ({
     inFlight.current = true;
     setBusy(true);
     setError("");
-    setProposal(null);
-    setBuildStatus("");
+    setPlan(null);
+    setBudget(null);
+    setBudgetLimits(RUN_LIMITS);
+    setProgress([]);
     setMessages(history);
     setPrompt("");
 
@@ -117,10 +148,12 @@ export const Chat = ({
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: history }),
-        signal: AbortSignal.timeout(90_000),
+        body: JSON.stringify({ messages: history, imageTask: true }),
+        signal: AbortSignal.timeout(240_000),
       });
       const data = await response.json();
+      if (data.budget) setBudget(data.budget);
+      if (data.limits) setBudgetLimits(data.limits);
       if (!response.ok) {
         throw new Error(
           typeof data.error === "string"
@@ -132,7 +165,8 @@ export const Chat = ({
         throw new Error("Victor returned an empty reply. Please try again.");
       }
       setMessages([...history, { role: "assistant", content: data.message }]);
-      setProposal(data.proposal || null);
+      setPlan(data.plan || null);
+      if (data.discovery) setProgress([`Registry search v${data.discovery.version}: ${data.discovery.created ? "agent created and tested" : "reused"} · ${data.discovery.matchedIds.length} matches`, ...data.discovery.tests.attempts.map((a: { attempt: number; passed: boolean; error?: string }) => `Discovery attempt ${a.attempt}: ${a.passed ? "PASS" : "FAIL"}${a.error ? " · " + a.error : ""}`)]);
     } catch (failure) {
       setMessages(messages);
       setPrompt(draft);
@@ -150,9 +184,13 @@ export const Chat = ({
   function startNewChat() {
     if (inFlight.current) return;
     setMessages([]);
+    setPlan(null);
+    attach(null);
+    setResult(null);
+    setBudget(null);
+    setBudgetLimits(RUN_LIMITS);
+    setProgress([]);
     setPrompt("");
-    setProposal(null);
-    setBuildStatus("");
     setError("");
     setCompleted(false);
   }
@@ -166,6 +204,15 @@ export const Chat = ({
         <h2>Victor</h2>
         <span className="online-dot" />
         <button
+          type="button"
+          className="icon-button"
+          style={{ width: "auto", fontSize: 12 }}
+          disabled={busy}
+          onClick={startNewChat}
+        >
+          New chat
+        </button>
+        <button
           className="icon-button"
           aria-label="Collapse agent chat"
           onClick={() => setChat(false)}
@@ -173,17 +220,18 @@ export const Chat = ({
           →
         </button>
       </div>
+      <RunBudgetCard used={budget} limits={budgetLimits} status={busy ? "Running" : error ? "Stopped" : completed ? "Completed" : budget ? "Ready" : "Per task"} />
       <div className="agent-conversation" aria-live="polite">
-        <h3>Got a tool in mind?</h3>
+        <h3>What would you like to do?</h3>
         <div className="message">
-          Try something like “add a tool to remove backgrounds” or “make my
-          images black and white”.
+          Upload an image and describe the result. Victor uses existing tools
+          and builds missing ones.
         </div>
         <div className="suggestions">
           <button
             disabled={busy || completed}
             onClick={() => {
-              setPrompt("Add a tool to remove backgrounds");
+              setPrompt("Remove the background from my image");
               textarea.current?.focus();
             }}
           >
@@ -192,7 +240,7 @@ export const Chat = ({
           <button
             disabled={busy || completed}
             onClick={() => {
-              setPrompt("Add a tool to make image black & white");
+              setPrompt("Make my image black & white");
               textarea.current?.focus();
             }}
           >
@@ -210,46 +258,67 @@ export const Chat = ({
             </div>
           </div>
         ))}
-        {proposal && (
+        {plan && (
           <div className="message">
-            <strong>{proposal.spec.name}</strong>
-            <p>{proposal.spec.description}</p>
-            <p>
-              {proposalInputs(proposal.spec)
-                .map((input) =>
-                  input.type === "images"
-                    ? `${input.id} (multiple images)`
-                    : input.id,
-                )
-                .join(" + ")}{" "}
-              → {proposal.spec.outputFormat.toUpperCase()}
-              {proposal.spec.operation === "custom" &&
-              proposal.spec.parameters.some((p) => p.id === "outputFormat")
-                ? " (selectable format)"
-                : ""}
-              {proposal.spec.operation === "resize"
-                ? ` · ${proposal.spec.width} × ${proposal.spec.height} px`
-                : proposal.spec.operation === "rotate"
-                  ? ` · ${proposal.spec.angle}° clockwise`
-                  : ""}
-            </p>
+            <strong>Plan</strong>
+            <ol>
+              {plan.steps.map((step, index) => (
+                <li key={index} style={{ marginBottom: 12 }}>
+                  <strong>
+                    {step.toolId ? "Existing tool" : "New tool needed"}
+                  </strong>
+                  <p>{step.capability}</p>
+                  {step.parameters.length > 0 && (
+                    <small>
+                      {step.parameters
+                        .map((p) => `${p.id}: ${p.value}`)
+                        .join(" · ")}
+                    </small>
+                  )}
+                </li>
+              ))}
+            </ol>
             <button
+              type="button"
               className="primary"
-              style={{ marginTop: 20 }}
-              disabled={busy || completed}
-              onClick={build}
+              disabled={busy || completed || !attachment}
+              onClick={runPlan}
             >
-              Confirm &amp; Build
+              {plan.steps.every((s) => s.toolId) ? "Run" : "Build & Run"}
             </button>
+            {!attachment && <p>Attach an image to run this plan.</p>}
           </div>
         )}
-        {buildStatus && (
+        {progress.length > 0 && (
           <div className="message" role="status">
-            {buildStatus}
-            {busy ? "…" : ""}
+            {progress.map((line, i) => (
+              <p key={i}>{line}</p>
+            ))}
           </div>
         )}
-        {busy && !buildStatus && (
+        {result && (
+          <div className="message">
+            <strong>Result</strong>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={result.url}
+              alt="Completed image result"
+              style={{
+                width: "100%",
+                maxHeight: 240,
+                objectFit: "contain",
+                marginTop: 12,
+              }}
+            />
+            <p>
+              {result.reused} reused · {result.created} created
+            </p>
+            <a className="primary" href={result.url} download={result.filename}>
+              Download
+            </a>
+          </div>
+        )}
+        {busy && progress.length === 0 && (
           <div className="message" role="status">
             Victor is thinking…
           </div>
@@ -267,10 +336,38 @@ export const Chat = ({
           send();
         }}
       >
+        {preview && (
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={preview}
+              alt="Attached image"
+              style={{ width: 64, height: 64, objectFit: "contain" }}
+            />
+            <span style={{ overflowWrap: "anywhere", fontSize: 12 }}>
+              {attachment?.name}
+            </span>
+            <button
+              type="button"
+              disabled={busy || completed}
+              onClick={() => attach(null)}
+              aria-label="Remove attached image"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <textarea
           ref={textarea}
-          aria-label="Describe the tool you want to add"
-          placeholder="Describe the tool you want to add…"
+          aria-label="Describe the result you want"
+          placeholder="Describe the result you want…"
           maxLength={8000}
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -287,6 +384,26 @@ export const Chat = ({
           disabled={busy || completed}
         />
         <div>
+          <label style={{ fontSize: 12, cursor: "pointer" }}>
+            Upload image
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/avif"
+              disabled={busy || completed}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                if (file.size > 10 * 1024 * 1024) {
+                  setError("Image must be 10 MB or smaller.");
+                  return;
+                }
+                attach(file);
+                setError("");
+              }}
+            />
+          </label>
           {completed ? (
             <button
               type="button"
@@ -294,7 +411,7 @@ export const Chat = ({
               disabled={busy}
               onClick={startNewChat}
             >
-              Start new chat
+              New chat
             </button>
           ) : (
             <button className="primary" disabled={!prompt.trim() || busy}>

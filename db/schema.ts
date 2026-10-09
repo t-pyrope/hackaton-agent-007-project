@@ -31,6 +31,7 @@ export const tools = pgTable("tools", {
   testReport: jsonb("test_report")
     .$type<{
       passed: boolean;
+      tests?: string;
       proposal?: import("../lib/tool-contract").Proposal;
       attempts?: Array<{
         attempt: number;
@@ -54,3 +55,14 @@ export const tools = pgTable("tools", {
 
 export type Tool = typeof tools.$inferSelect;
 export type NewTool = typeof tools.$inferInsert;
+
+// A separate namespace prevents management code from being exposed as an image tool.
+export const registryCapabilities = pgTable("registry_capabilities", {
+  id: text("id").primaryKey(),
+  version: text("version").notNull(),
+  code: text("code").notNull(),
+  tests: text("tests").notNull(),
+  permissions: jsonb("permissions").$type<string[]>().notNull(),
+  testReport: jsonb("test_report").$type<{ passed: boolean; attempts: Array<{ attempt: number; passed: boolean; error?: string }> }>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

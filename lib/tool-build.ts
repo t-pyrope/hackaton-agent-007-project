@@ -1,4 +1,5 @@
 import "server-only";
+import { RunBudget, BudgetExceeded } from "./run-budget";
 import { count, eq, sql } from "drizzle-orm";
 import { db } from "./db";
 import { tools } from "@/db/schema";
@@ -12,16 +13,24 @@ import { BUILD_TIMEOUT_MS, timedStage } from "./build-timing";
 export async function buildTool(
   token: unknown,
   emit: (status: BuildStatus, attempt: number) => void,
+  taskSignal?: AbortSignal,
+  budget = new RunBudget(),
+  reportTests?: (report: typeof tools.$inferSelect.testReport) => void,
 ) {
   const proposal = verifyProposal(token);
-  const signal = AbortSignal.timeout(BUILD_TIMEOUT_MS);
+  const signal = AbortSignal.any([
+    AbortSignal.timeout(BUILD_TIMEOUT_MS),
+    ...(taskSignal ? [taskSignal] : []),
+  ]);
   if (!process.env.DATABASE_URL)
     throw new ChatError("Set DATABASE_URL on the server.", 503);
   // Transaction-scoped lock serializes all creators across server instances. No schema change required.
   return db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL lock_timeout = '750s'`);
     await tx.execute(sql`SET LOCAL statement_timeout = '750s'`);
-    await tx.execute(sql`SET LOCAL idle_in_transaction_session_timeout = '800s'`);
+    await tx.execute(
+      sql`SET LOCAL idle_in_transaction_session_timeout = '800s'`,
+    );
     await tx.execute(sql`SELECT pg_advisory_xact_lock(706007)`);
     const [existing] = await tx
       .select()
@@ -43,7 +52,7 @@ export async function buildTool(
       const context = { buildId: proposal.id, attempt: attempt + 1 };
       const generated = await timedStage(
         "generation",
-        () => generateTool(proposal.spec, previous, signal),
+        () => generateTool(proposal.spec, previous, signal, budget),
         context,
       );
       let uiSchema: typeof tools.$inferSelect.uiSchema;
@@ -62,17 +71,21 @@ export async function buildTool(
               proposal.spec,
               signal,
               context,
+              budget,
             ),
           context,
         );
+        reportTests?.(report);
+        console.info("Tool test report", JSON.stringify({ buildId: proposal.id, attempt, report }));
         attempts.push({ attempt, report });
         if (!report.passed) throw new Error(JSON.stringify(report));
       } catch (error) {
+        if (error instanceof BudgetExceeded) throw error;
         console.error(
           `Tool verification attempt ${attempt + 1}:`,
           String(error).slice(0, 12000),
         );
-        if (!attempts.some((a) => a.attempt === attempt))
+        if (!attempts.some((a) => a.attempt === attempt)) {
           attempts.push({
             attempt,
             report: {
@@ -86,6 +99,8 @@ export async function buildTool(
               ],
             },
           });
+          reportTests?.(attempts.at(-1)!.report);
+        }
         previous = {
           code: generated.code,
           tests: generated.tests,
@@ -111,7 +126,7 @@ export async function buildTool(
               description: proposal.spec.description,
               code: generated.code,
               uiSchema,
-              testReport: { ...report, proposal: proposal.spec, attempts },
+              testReport: { ...report, tests: generated.tests, proposal: proposal.spec, attempts },
             })
             .returning(),
         context,

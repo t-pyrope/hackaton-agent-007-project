@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  outputFileTracingIncludes: { "/api/tools/*": ["./sandbox-runtime/*"] },
+  outputFileTracingIncludes: { "/api/tools/*": ["./sandbox-runtime/*"], "/api/tasks/*": ["./sandbox-runtime/*"], "/api/chat": ["./sandbox-runtime/*"] },
   experimental: {
     agentFeedback: true,
   },

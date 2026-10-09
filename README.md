@@ -137,3 +137,62 @@ Offline safeguards and the existing compression checks:
 After the live test, `node tests/sandbox-verification.cjs` checks the saved module in
 fresh microVMs and confirms rejection of empty tests and an incorrect operation;
 it does not install another tool. Report: `/tmp/victor-sandbox-verification.json`.
+
+## Frankenstein task loop
+
+The chat accepts one image and a result-oriented task. Each confirmed plan has at
+most four sequential steps. Invalid plans get at most two model repairs within
+the same run budget. Missing image tools are generated and tested before
+registration; verified existing IDs are reused. Each step consumes the previous
+image output. A new chat sends no previous conversation and reloads the database
+registry. Multi-image composition in chat is currently unsupported.
+
+Registry discovery is itself agent-built. When a real image task first needs
+capability discovery, the agent writes a general search module and its tests.
+Generated tests and independent searches run in credential-free microVMs before
+installation in `registry_capabilities`. The table is created additively on first
+use. The module has the explicit `{query, registry} -> string[]` interface and only
+`registry:read` permission; its loader exposes no filesystem or network. Its code,
+tests, version, permissions, failed repair history and passing report persist in
+Neon. Later chats execute that same module in a fresh microVM. Search ranks the
+registry for planning; the full registry remains available to avoid rebuilding on
+lexical misses. Neither search results nor generated code can install image tools
+or widen execution permissions. The search bootstrap installs after tests without
+a human gate; image-tool installation remains behind the confirmed task plan.
+
+A shared `RunBudget` spans discovery, planning, repairs and image execution using a
+signed budget snapshot in the plan. Hard limits per run: eight model requests,
+300,000 conservatively reserved token units, and 28 Sandbox starts. Reservations
+include input UTF-8 bytes, maximum output/reasoning tokens and framing allowance;
+failed requests are charged and reservations are never refunded. Checks occur
+before API requests or microVM creation. These are resource caps, not an exact USD
+meter: actual prices depend on the configured model and infrastructure plan.
+Each Sandbox also has a lifetime/resource cap. Repeating a confirmed request is a
+new bounded execution, while proposal IDs prevent reinstalling successful tools.
+There is no account-wide billing quota or authentication in this prototype.
+
+The chat shows individual test outcomes, failed attempts and run budget usage.
+Model tests for custom image algorithms do not constitute an independent semantic
+oracle; independent image decoding alone cannot prove every arbitrary effect.
+Registry search has independent positive, compound and negative query checks.
+
+Run the real two-session acceptance check against an already configured dev server:
+
+```bash
+TEST_BASE_URL=http://127.0.0.1:3000 node tests/frankenstein-live.cjs
+```
+
+It records the registry before the run, submits a photo-proof task, processes an
+image, then submits a different task with no conversation history or manually
+specified tool IDs. It requires two distinct generated tools, no new generation
+in session two, persisted discovery reuse and independently checked image pixels
+and dimensions. It consumes real API resources and installs missing capabilities.
+It intentionally fails if the first task has no gap; do not delete or seed tools
+to manufacture a pass. Every invocation writes a distinct `/tmp/frankenstein-live-*.json`
+report, including failures, and successful session images. For a creation demo on
+an already populated registry, use a genuinely new useful task.
+
+For the 90-second video: show registry before the task; show the actual gap, test
+results and installation; show the resulting photo; start a new chat and show
+composition of two generated IDs with zero created tools. Waiting may be sped up;
+keep failed attempts visible. Commit all new files before the repository freeze.
