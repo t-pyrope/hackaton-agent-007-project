@@ -1,4 +1,5 @@
 import "server-only";
+import { IMAGE_TEST_FIXTURE } from "./test-fixture";
 import { RunBudget, BudgetExceeded } from "./run-budget";
 import { BUILD_TIMEOUT_MS, timedStage } from "./build-timing";
 import { Sandbox } from "@vercel/sandbox";
@@ -251,8 +252,7 @@ export async function testTool(
   const results: Tool["testReport"]["results"] = [];
   const sandbox = await runtimeSandbox(signal, context, budget);
   try {
-    const width = 7,
-      height = 5;
+    const { width, height } = IMAGE_TEST_FIXTURE;
     const raw = Buffer.alloc(width * height * 4);
     for (let i = 0; i < width * height; i++) {
       raw[i * 4] = (i * 47) % 256;

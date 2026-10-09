@@ -1,0 +1,35 @@
+{
+  "passed": true,
+  "installed": false,
+  "budget": {
+    "modelCalls": 1,
+    "tokenUnits": 46584,
+    "sandboxStarts": 2
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "report": {
+        "passed": true,
+        "results": [
+          {
+            "name": "Model tests (Sandbox exit 0)",
+            "passed": true
+          },
+          {
+            "name": "Independent image decoding and file limit",
+            "passed": true
+          },
+          {
+            "name": "Independent dimensions",
+            "passed": true
+          },
+          {
+            "name": "Independent operation pixels and alpha",
+            "passed": true
+          }
+        ]
+      }
+    }
+  ]
+}

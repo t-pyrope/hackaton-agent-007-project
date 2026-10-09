@@ -114,6 +114,7 @@ function buildHarness({
       }),
     }),
   };
+  const repairInputs = [];
   const { buildTool } = load("lib/tool-build.ts", {
     "./db": {
       db: {
@@ -127,7 +128,8 @@ function buildHarness({
     "@/db/schema": { tools: { id: "id" } },
     "./openai": {
       ChatError,
-      generateTool: async () => {
+      generateTool: async (_spec, previous) => {
+        repairInputs.push(previous);
         generations++;
         return { code: "code", tests: "tests", uiSchemaJson: "{}" };
       },
@@ -160,6 +162,7 @@ function buildHarness({
   return {
     run: () => buildTool("token", () => {}),
     state: () => ({ generations, saves, tests, committed }),
+    repairInputs,
   };
 }
 
@@ -791,4 +794,38 @@ test("Pre-existing custom parameters named outputFormat keep their PNG contract"
   };
   validateProposal(old);
   assert.equal(resolvedOutputFormat(old), "png");
+});
+
+
+test("repairs receive structured verification rather than only an error string", async () => {
+  const h = buildHarness({ pass: false });
+  await assert.rejects(h.run());
+  assert.equal(h.repairInputs[0], undefined);
+  assert.equal(h.repairInputs[1].verification.passed, false);
+  assert.equal(h.repairInputs[1].verification.results[0].name, "independent");
+  assert.equal(h.repairInputs[1].verification.results[0].error, "bad pixels");
+});
+
+test("grayscale test fixture decodes to 140 RGBA bytes and preserves semi-transparent alpha", async () => {
+  const sharp = require("sharp");
+  const { IMAGE_TEST_FIXTURE: fixture } = load("lib/test-fixture.ts");
+  const raw = Buffer.alloc(fixture.width * fixture.height * 4);
+  for (let i = 0; i < fixture.width * fixture.height; i++) {
+    raw[i * 4] = (i * 47) % 256;
+    raw[i * 4 + 1] = (i * 83 + 31) % 256;
+    raw[i * 4 + 2] = (i * 19 + 119) % 256;
+    raw[i * 4 + 3] = i % 4 === 0 ? 128 : 255;
+  }
+  const image = await sharp(raw, { raw: { width: fixture.width, height: fixture.height, channels: 4 } }).png().toBuffer();
+  const reference = await sharp(image).greyscale().png().toBuffer();
+  const decoded = await sharp(reference).toColourspace("srgb").ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.equal(decoded.info.channels, 4);
+  assert.equal(decoded.data.length, 140);
+  assert.equal(decoded.data.length, decoded.info.width * decoded.info.height * decoded.info.channels);
+  for (let i = 0; i < fixture.width * fixture.height; i++) {
+    const offset = i * decoded.info.channels;
+    assert.equal(decoded.data[offset], decoded.data[offset + 1]);
+    assert.equal(decoded.data[offset], decoded.data[offset + 2]);
+    assert.equal(decoded.data[offset + 3], raw[i * 4 + 3]);
+  }
 });

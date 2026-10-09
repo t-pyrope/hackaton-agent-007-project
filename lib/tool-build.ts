@@ -40,7 +40,7 @@ export async function buildTool(
     const [total] = await tx.select({ n: count() }).from(tools);
     if (total.n >= 10)
       throw new ChatError("You can install at most 10 tools.", 409);
-    let previous: { code: string; tests: string; errors: string } | undefined;
+    let previous: { code: string; tests: string; errors: string; verification?: typeof tools.$inferSelect.testReport } | undefined;
     const attempts: Array<{
       attempt: number;
       report: typeof tools.$inferSelect.testReport;
@@ -105,6 +105,7 @@ export async function buildTool(
           code: generated.code,
           tests: generated.tests,
           errors: String(error).slice(0, 12000),
+          verification: attempts.find((a) => a.attempt === attempt)?.report,
         };
         if (attempt === 3)
           throw new ChatError(

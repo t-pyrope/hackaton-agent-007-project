@@ -177,7 +177,7 @@ export const Chat = ({
           `Registry search v${data.discovery.version}: ${data.discovery.created ? "agent created and tested" : "reused"} · ${data.discovery.matchedIds.length} matches`,
           ...data.discovery.tests.attempts.map(
             (a: { attempt: number; passed: boolean; error?: string }) =>
-              `Discovery attempt ${a.attempt}: ${a.passed ? "PASS" : "FAIL"}${a.error ? " · " + a.error : ""}`,
+              `${data.discovery.created ? "Discovery build test" : "Saved discovery build test"} (synthetic data), attempt ${a.attempt}: ${a.passed ? "PASS" : "FAIL"}${a.error ? " · " + a.error : ""}`,
           ),
         ]);
     } catch (failure) {

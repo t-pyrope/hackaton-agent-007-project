@@ -99,6 +99,12 @@ async function load(file, assertionLibrary = assert) {
           : value;
       },
     });
+    const fixtures = await Promise.all(inputPaths.map(async (filePath) => {
+      const metadata = await sharp(filePath, { limitInputPixels: 16777216 }).metadata();
+      return Object.freeze({ path: filePath, width: metadata.width, height: metadata.height,
+        encodedChannels: metadata.channels, hasAlpha: metadata.hasAlpha });
+    }));
+    const testContext = Object.freeze({ fixtures: Object.freeze(fixtures) });
     const test = await load("job/tests.cjs", trackedAssert);
     await test(
       async (...args) => {
@@ -112,6 +118,7 @@ async function load(file, assertionLibrary = assert) {
       inputPaths,
       inputs,
       outputFormat,
+      testContext,
     );
     assert(executions > 0, "Model tests must execute the generated module.");
     assert(assertions > 0, "Model tests must perform at least one assertion.");
