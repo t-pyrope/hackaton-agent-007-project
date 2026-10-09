@@ -1,7 +1,7 @@
 import "server-only";
 import ts from "typescript";
 import type { Tool } from "@/db/schema";
-import type { Proposal } from "./tool-contract";
+import { proposalInputs, type Proposal } from "./tool-contract";
 export function validateCode(code: string) {
   if (
     typeof code !== "string" ||
@@ -110,14 +110,18 @@ export function validateUiSchema(
     !ui ||
     Object.keys(ui).sort().join() !== "inputs,output,parameters" ||
     !Array.isArray(ui.inputs) ||
-    ui.inputs.length !== 1 ||
-    ui.inputs[0]?.id !== "image" ||
-    ui.inputs[0]?.type !== "image" ||
-    ui.inputs[0]?.required !== true ||
+    JSON.stringify(
+      ui.inputs.map((i) => ({ id: i.id, type: i.type, required: i.required })),
+    ) !== JSON.stringify(proposalInputs(spec)) ||
+    ui.inputs.some(
+      (i) => Object.keys(i).sort().join() !== "id,required,type",
+    ) ||
     ui.output?.type !== "image" ||
     !Array.isArray(ui.parameters)
   )
-    throw new Error("UI must accept one image and return one image.");
+    throw new Error(
+      "UI inputs must match the confirmed proposal and return one image.",
+    );
   if (spec.operation === "custom") {
     const expected = spec.parameters.map(({ min, max, options, ...p }) => ({
       ...p,

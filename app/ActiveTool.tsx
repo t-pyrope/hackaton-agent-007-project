@@ -3,6 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import ImageUpload from "@/components/image-tools/ImageUpload";
 import CompressPng from "@/components/image-tools/CompressPng";
 import type { Tool } from "./types";
+import {
+  proposalInputs,
+  resolvedOutputFormat,
+  type OutputFormat,
+} from "@/lib/tool-contract";
 import { Box } from "@mui/material";
 
 export const ActiveTool = ({
@@ -34,7 +39,18 @@ function InstalledTool({ tool }: { tool: Tool }) {
   const request = useRef<AbortController | null>(null);
 
   useEffect(() => () => request.current?.abort(), []);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<Record<string, File[]>>({});
+  const inputs = tool.testReport.proposal
+    ? proposalInputs(tool.testReport.proposal)
+    : tool.uiSchema.inputs;
+  const [resultFormat, setResultFormat] = useState<OutputFormat>(
+    tool.testReport.proposal
+      ? resolvedOutputFormat(tool.testReport.proposal)
+      : "png",
+  );
+  const ready = (selected: Record<string, File[]>) =>
+    inputs.every((input) => !input.required || selected[input.id]?.length);
+
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -47,8 +63,8 @@ function InstalledTool({ tool }: { tool: Tool }) {
     [result],
   );
 
-  async function run(next: File, nextValues = values) {
-    if (request.current) return;
+  async function run(next: Record<string, File[]>, nextValues = values) {
+    if (request.current || !ready(next)) return;
     const controller = new AbortController();
     request.current = controller;
     setBusy(true);
@@ -58,7 +74,8 @@ function InstalledTool({ tool }: { tool: Tool }) {
     try {
       const form = new FormData();
       form.set("id", tool.id);
-      form.set("image", next);
+      for (const input of inputs)
+        for (const file of next[input.id] ?? []) form.append(input.id, file);
       for (const p of tool.uiSchema.parameters)
         form.set(p.id, nextValues[p.id] ?? String(p.default));
       const response = await fetch("/api/tools/run", {
@@ -69,7 +86,10 @@ function InstalledTool({ tool }: { tool: Tool }) {
       if (!response.ok)
         throw new Error((await response.json()).error || "Processing failed.");
       const blob = await response.blob();
-      if (!controller.signal.aborted) setResult(URL.createObjectURL(blob));
+      if (!controller.signal.aborted) {
+        setResultFormat(blob.type.replace("image/", "") as OutputFormat);
+        setResult(URL.createObjectURL(blob));
+      }
     } catch (e) {
       if (!controller.signal.aborted)
         setError(e instanceof Error ? e.message : "Processing failed.");
@@ -88,30 +108,60 @@ function InstalledTool({ tool }: { tool: Tool }) {
           <p>{tool.description}</p>
         </div>
       </div>
-      <ImageUpload
-        accept="image/png,image/jpeg,image/webp"
-        title={file ? "Change image" : "Upload image"}
-        description="Drop one PNG, JPEG or WebP here or"
-        fileTypes="One image · Up to 10 MB · Up to 16 MP"
-        processing={busy}
-        hasImage={!!file}
-        onFiles={(files) => {
-          if (request.current || !files?.length) return;
-          setResult("");
-          setError("");
-          if (files.length !== 1) {
-            setError("Please upload exactly one image.");
-            return;
-          }
-          const next = files[0];
-          if (next.size > 10 * 1024 * 1024) {
-            setError("Images must be 10 MB or smaller.");
-            return;
-          }
-          setFile(next);
-          void run(next);
-        }}
-      />
+      {inputs.map((input) => (
+        <div key={input.id}>
+          <ImageUpload
+            multiple={input.type === "images"}
+            accept="image/png,image/jpeg,image/webp,image/avif"
+            title={`${files[input.id]?.length ? "Change" : "Upload"} ${input.id}${input.required ? "" : " (optional)"}`}
+            description={`Drop ${input.type === "images" ? "images" : "one image"} here or`}
+            fileTypes="PNG, JPEG, WebP, AVIF · 10 MB per image · 16 MP · 10 files total"
+            processing={busy}
+            hasImage={!!files[input.id]?.length}
+            onFiles={(uploaded) => {
+              if (request.current || !uploaded?.length) return;
+              setResult("");
+              setError("");
+              const selected = Array.from(uploaded);
+              if (input.type === "image" && selected.length !== 1) {
+                setError("Please upload exactly one image for this input.");
+                return;
+              }
+              if (
+                selected.some(
+                  (file) => !file.size || file.size > 10 * 1024 * 1024,
+                )
+              ) {
+                setError("Each image must be nonempty and 10 MB or smaller.");
+                return;
+              }
+              const next = { ...files, [input.id]: selected };
+              if (Object.values(next).flat().length > 10) {
+                setError("Upload at most 10 images.");
+                return;
+              }
+              setFiles(next);
+              if (ready(next)) void run(next);
+            }}
+          />
+          {!!files[input.id]?.length && (
+            <p>{files[input.id].map((file) => file.name).join(", ")}</p>
+          )}
+          {!input.required && !!files[input.id]?.length && (
+            <button
+              disabled={busy}
+              onClick={() => {
+                const next = { ...files, [input.id]: [] };
+                setFiles(next);
+                setResult("");
+                if (ready(next)) void run(next);
+              }}
+            >
+              Remove {input.id}
+            </button>
+          )}
+        </div>
+      ))}
       <div className="compression-controls">
         {tool.uiSchema.parameters.map((p) => (
           <p key={p.id}>
@@ -124,7 +174,7 @@ function InstalledTool({ tool }: { tool: Tool }) {
                   onChange={(e) => {
                     const nextValues = { ...values, [p.id]: e.target.value };
                     setValues(nextValues);
-                    if (file) void run(file, nextValues);
+                    if (ready(files)) void run(files, nextValues);
                   }}
                 >
                   {(p.type === "boolean"
@@ -162,7 +212,7 @@ function InstalledTool({ tool }: { tool: Tool }) {
                   onChange={(e) => {
                     const nextValues = { ...values, [p.id]: e.target.value };
                     setValues(nextValues);
-                    if (file) void run(file, nextValues);
+                    if (ready(files)) void run(files, nextValues);
                   }}
                 />
               )}
@@ -184,8 +234,12 @@ function InstalledTool({ tool }: { tool: Tool }) {
             />
 
             <Box sx={{ mt: 2 }}>
-              <a className="primary" href={result} download="result.png">
-                Download PNG
+              <a
+                className="primary"
+                href={result}
+                download={`result.${resultFormat}`}
+              >
+                Download {resultFormat.toUpperCase()}
               </a>
             </Box>
           </>

@@ -71,6 +71,16 @@ async function load(file, assertionLibrary = assert) {
           height: spec.height,
           angle: spec.angle,
         };
+  const inputs = JSON.parse(await fs.readFile("job/inputs.json", "utf8"));
+  const inputPaths = inputs.flatMap((input) => input.paths);
+  const inputPath = inputPaths[0];
+  const outputFormat = spec.inputs
+    ? parameters.outputFormat || spec.outputFormat
+    : spec.outputFormat;
+  assert(
+    ["png", "jpeg", "webp", "avif"].includes(outputFormat),
+    "Unsupported output format.",
+  );
   if (process.argv[2] === "tests") {
     let assertions = 0;
     let executions = 0;
@@ -96,16 +106,22 @@ async function load(file, assertionLibrary = assert) {
         return run(...args);
       },
       trackedAssert,
-      ROOT + "/job/input.png",
-      ROOT + "/job/model-test.png",
+      inputPath,
+      ROOT + `/job/model-test.${outputFormat}`,
       parameters,
+      inputPaths,
+      inputs,
+      outputFormat,
     );
     assert(executions > 0, "Model tests must execute the generated module.");
     assert(assertions > 0, "Model tests must perform at least one assertion.");
   } else {
-    const outputPath = ROOT + "/job/output.png";
+    const outputPath = ROOT + `/job/output.${outputFormat}`;
     const result = await run({
-      inputPath: ROOT + "/job/input.png",
+      inputPath,
+      inputPaths,
+      inputs,
+      outputFormat,
       outputPath,
       parameters,
     });

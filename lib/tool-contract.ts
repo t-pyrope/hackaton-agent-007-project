@@ -1,3 +1,35 @@
+export const OUTPUT_FORMATS = ["png", "jpeg", "webp", "avif"] as const;
+export type OutputFormat = (typeof OUTPUT_FORMATS)[number];
+export type ImageInput = {
+  id: string;
+  type: "image" | "images";
+  required: boolean;
+};
+export const DEFAULT_INPUTS: ImageInput[] = [
+  { id: "image", type: "image", required: true },
+];
+export function proposalInputs(spec: Proposal): ImageInput[] {
+  return spec.operation === "custom"
+    ? (spec.inputs ?? DEFAULT_INPUTS)
+    : DEFAULT_INPUTS;
+}
+export function resolvedOutputFormat(spec: Proposal): OutputFormat {
+  const format =
+    spec.operation === "custom" && spec.inputs !== undefined
+      ? (spec.parameters.find((p) => p.id === "outputFormat")?.default ??
+        spec.outputFormat)
+      : spec.outputFormat;
+  if (!OUTPUT_FORMATS.includes(format as OutputFormat))
+    throw new Error("Unsupported output format.");
+  return format as OutputFormat;
+}
+export const FORMAT_MIME: Record<OutputFormat, string> = {
+  png: "image/png",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  avif: "image/avif",
+};
+
 export type Operation = "grayscale" | "invert" | "resize" | "rotate";
 
 type LegacyProposal = {
@@ -49,7 +81,8 @@ export type CustomProposal = {
   name: string;
   description: string;
   operation: "custom";
-  outputFormat: "png";
+  outputFormat: OutputFormat;
+  inputs?: ImageInput[];
   parameters: Parameter[];
 };
 export type Proposal = LegacyProposal | CustomProposal;
@@ -63,7 +96,22 @@ export const proposalSchema = {
         name: { type: "string" },
         description: { type: "string" },
         operation: { type: "string", enum: ["custom"] },
-        outputFormat: { type: "string", enum: ["png"] },
+        outputFormat: { type: "string", enum: [...OUTPUT_FORMATS] },
+        inputs: {
+          type: "array",
+          minItems: 1,
+          maxItems: 4,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              id: { type: "string" },
+              type: { type: "string", enum: ["image", "images"] },
+              required: { type: "boolean" },
+            },
+            required: ["id", "type", "required"],
+          },
+        },
         parameters: {
           type: "array",
           items: {
@@ -127,6 +175,7 @@ export const proposalSchema = {
         "description",
         "operation",
         "outputFormat",
+        "inputs",
         "parameters",
       ],
     },
@@ -161,18 +210,49 @@ export function validateProposal(value: unknown): Proposal {
   if (custom?.operation === "custom") {
     if (
       Object.keys(custom).sort().join() !==
-        "description,name,operation,outputFormat,parameters" ||
+        (custom.inputs === undefined
+          ? "description,name,operation,outputFormat,parameters"
+          : "description,inputs,name,operation,outputFormat,parameters") ||
       typeof custom.name !== "string" ||
       !custom.name.trim() ||
       custom.name.length > 80 ||
       typeof custom.description !== "string" ||
       !custom.description.trim() ||
       custom.description.length > 1000 ||
-      custom.outputFormat !== "png" ||
+      !OUTPUT_FORMATS.includes(custom.outputFormat) ||
       !Array.isArray(custom.parameters) ||
       custom.parameters.length > 16
     )
       throw new Error("Invalid tool proposal.");
+    const inputs = proposalInputs(custom);
+    if (
+      !Array.isArray(inputs) ||
+      inputs.length < 1 ||
+      inputs.length > 4 ||
+      !inputs.some((i) => i.required)
+    )
+      throw new Error("Invalid image inputs.");
+    const inputIds = new Set<string>();
+    for (const input of inputs) {
+      if (
+        !input ||
+        Object.keys(input).sort().join() !== "id,required,type" ||
+        typeof input.id !== "string" ||
+        !/^[a-z][a-zA-Z0-9_]{0,39}$/.test(input.id) ||
+        [
+          "id",
+          "constructor",
+          "prototype",
+          "__proto__",
+          "outputFormat",
+        ].includes(input.id) ||
+        inputIds.has(input.id) ||
+        !["image", "images"].includes(input.type) ||
+        typeof input.required !== "boolean"
+      )
+        throw new Error("Invalid image input.");
+      inputIds.add(input.id);
+    }
     const ids = new Set<string>();
     for (const p of custom.parameters) {
       if (
@@ -185,6 +265,7 @@ export function validateProposal(value: unknown): Proposal {
           p.id,
         ) ||
         ids.has(p.id) ||
+        inputIds.has(p.id) ||
         typeof p.label !== "string" ||
         !p.label.trim() ||
         p.label.length > 80 ||
@@ -215,6 +296,19 @@ export function validateProposal(value: unknown): Proposal {
       validateParameterValue(p, p.default);
       ids.add(p.id);
     }
+    const formatControl = custom.parameters.find(
+      (p) => p.id === "outputFormat",
+    );
+    if (
+      custom.inputs !== undefined &&
+      formatControl &&
+      (formatControl.type !== "select" ||
+        formatControl.default !== custom.outputFormat ||
+        formatControl.options?.some(
+          (o) => !OUTPUT_FORMATS.includes(o.value as OutputFormat),
+        ))
+    )
+      throw new Error("Invalid output format control.");
     return custom;
   }
   const p = value as LegacyProposal;

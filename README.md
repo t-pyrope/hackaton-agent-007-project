@@ -54,9 +54,13 @@ signed proposal UUID is the tools primary key, so resending a confirmation retur
 the same record. A busy lock times out after five seconds; retry after the running
 build finishes. This prototype has no per-user collection/authentication model.
 
-Chat returns English text and a validated proposal for grayscale, invert, exact
-resize or right-angle rotation. Unsupported operations get an explanation without
-a build button. Confirm & Build submits the signed, 30-minute proposal; no code is
+Chat returns English text and a validated proposal for algorithmic image tools,
+including conversion, compression, aspect-preserving resize, padding/cropping,
+masks, edge-connected color background removal, watermarks, logo compositing,
+shadows, filters, region pixelation, collages and metadata stripping. AI processing
+and external services are unsupported. Legacy grayscale, invert, stretching resize
+and right-angle rotation retain their existing PNG contract. Other behaviors use
+custom proposals with confirmed settings and input controls. Confirm & Build submits the signed, 30-minute proposal; no code is
 generated before confirmation. Build progress is streamed as NDJSON: Writing Code,
 Testing, Fixing, Installed. Installed is sent only after the database commits.
 Up to three repairs follow the initial attempt. Failure rolls back without saving.
@@ -64,8 +68,18 @@ Up to three repairs follow the initial attempt. Failure rolls back without savin
 The CommonJS contract is:
 
 ```js
-module.exports = async function ({ inputPath, outputPath, parameters }) {
-  // Read the supplied file, write one PNG to outputPath, return outputPath.
+module.exports = async function ({
+  inputPath,
+  inputPaths,
+  inputs,
+  outputPath,
+  outputFormat,
+  parameters,
+}) {
+  // inputPath: first image, retained for existing tools.
+  // inputPaths: uploaded paths in confirmed input order and upload order.
+  // inputs: [{ id, paths }] for each confirmed image/images input control.
+  // Write one static image in outputFormat to outputPath; return outputPath.
 };
 ```
 
@@ -83,7 +97,11 @@ then sets `deny-all` before any generated code is uploaded/executed. No applicat
 secrets or environment variables are passed to Sandbox. Sandboxes are nonpersistent
 and stopped in finally. Limits: 1 vCPU / 2 GB VM RAM, 256 MB JavaScript heap,
 120-second Sandbox lifetime, 60-second dependency install and 15-second command for
-installed tool execution, 10 MB input/output, 16,777,216 decoded pixels. During a
+installed tool execution, 10 MB per file/output, up to ten input files (100 MB total),
+16,777,216 decoded pixels per image. Inputs and outputs support PNG, JPEG, WebP
+and AVIF. Custom proposals declare up to four image/images input controls; old
+proposals without inputs default to one image. An optional outputFormat select
+parameter enables format selection, with the proposal format as its default. During a
 build, OpenAI requests, Sandbox lifetime and commands allow 750 seconds, sharing
 one 750-second overall abort budget across all attempts. Database lock and statement
 timeouts are 750 seconds, with an 800-second idle transaction timeout. The
@@ -94,11 +112,18 @@ Server logs labeled `Tool build timing` record `stage`, `durationMs`, `outcome`,
 tests and tool installation, including failed operations.
 
 Model tests run in one microVM. Independent verification uses a fresh microVM and a
-trusted colored RGBA fixture; the server decodes the returned PNG and checks format,
-dimensions, exact operation pixels and preserved alpha against a trusted reference.
-Tests cannot forge this report. The actual results, failed attempts, and confirmed
+trusted colored RGBA fixture plus secondary image fixtures for multi-image tools.
+The server decodes the selected output format and enforces file/pixel limits; each
+selectable format is executed independently. Legacy operations additionally check
+dimensions, exact operation pixels and alpha against a trusted reference. Custom
+effects rely on operation-specific model tests; independent decoding alone does
+not prove effect correctness. Tests cannot forge the independent report. The actual results, failed attempts, and confirmed
 proposal are saved in `test_report`. The UI loads persisted tools, renders their
-settings, executes them through `/api/tools/run`, and downloads PNG results.
+settings and single/multiple upload controls, executes them through `/api/tools/run`,
+and downloads results with the selected MIME type and extension. Region pixelation
+uses numeric coordinates rather than a mouse selection overlay. JPEG export must
+flatten transparency onto the confirmed background. PNG quality uses palette
+quantization; compression cannot guarantee a smaller file for every input.
 
 Development-only `GET /api/sandbox/check` returns `{stdout:"sandbox-ok\n",exitCode:0}`;
 production returns 404. Run `node tests/victor-e2e.cjs` against the dev server for the

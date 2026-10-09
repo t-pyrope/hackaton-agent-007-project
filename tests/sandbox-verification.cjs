@@ -3,6 +3,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const ts = require("typescript");
+const path = require("node:path");
 const { loadEnvConfig } = require("@next/env");
 loadEnvConfig(process.cwd());
 const { Pool, neonConfig } = require("@neondatabase/serverless");
@@ -18,7 +19,13 @@ function load(file) {
   }).outputText;
   const module = { exports: {} };
   new Function("require", "module", "exports", source)(
-    (name) => (name === "server-only" ? {} : require(name)),
+    (name) => {
+      if (name === "server-only") return {};
+      const relative = path.resolve(path.dirname(file), name + ".ts");
+      if (name.startsWith(".") && fs.existsSync(relative))
+        return load(relative);
+      return require(name);
+    },
     module,
     module.exports,
   );

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 
 type Props = {
   accept: string;
+  multiple?: boolean;
   title: string;
   description: string;
   fileTypes: string;
@@ -14,6 +15,7 @@ type Props = {
 
 export default function ImageUpload({
   accept,
+  multiple = false,
   title,
   description,
   fileTypes,
@@ -30,6 +32,7 @@ export default function ImageUpload({
         ref={input}
         type="file"
         accept={accept}
+        multiple={multiple}
         aria-label={title}
         hidden
         disabled={processing}

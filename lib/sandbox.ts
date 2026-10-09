@@ -5,11 +5,82 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Writable } from "node:stream";
 import sharp from "sharp";
-import type { Proposal } from "./tool-contract";
+import {
+  proposalInputs,
+  resolvedOutputFormat,
+  type Proposal,
+} from "./tool-contract";
 import type { Tool } from "@/db/schema";
 
 const ROOT = "/vercel/sandbox";
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const MAX_INPUT_FILES = 10;
+export const MAX_TOTAL_BYTES = MAX_FILE_BYTES * MAX_INPUT_FILES;
+export type ToolInput = { id: string; files: Buffer[] };
+
+function normalizeInputs(
+  spec: Proposal,
+  input: Buffer | ToolInput[],
+): ToolInput[] {
+  const supplied = Buffer.isBuffer(input)
+    ? [{ id: "image", files: [input] }]
+    : input;
+  const definitions = proposalInputs(spec);
+  if (
+    supplied.some((i) => !definitions.some((d) => d.id === i.id)) ||
+    new Set(supplied.map((i) => i.id)).size !== supplied.length
+  )
+    throw new Error("Unknown or duplicate image input.");
+  const ordered = definitions.map((d) => ({
+    id: d.id,
+    files: supplied.find((i) => i.id === d.id)?.files ?? [],
+  }));
+  let count = 0,
+    bytes = 0;
+  for (const [index, entry] of ordered.entries()) {
+    const definition = definitions[index];
+    if (
+      (definition.required && !entry.files.length) ||
+      (definition.type === "image" && entry.files.length > 1)
+    )
+      throw new Error("Missing or invalid image input.");
+    for (const file of entry.files) {
+      if (
+        !Buffer.isBuffer(file) ||
+        !file.length ||
+        file.length > MAX_FILE_BYTES
+      )
+        throw new Error("Input exceeds 10 MB or is empty.");
+      count++;
+      bytes += file.length;
+    }
+  }
+  if (!count || count > MAX_INPUT_FILES || bytes > MAX_TOTAL_BYTES)
+    throw new Error("Upload at most 10 images.");
+  return ordered;
+}
+
+function inputFiles(input: ToolInput[]) {
+  let index = 0;
+  const manifest = input.map((entry) => ({
+    id: entry.id,
+    paths: entry.files.map(
+      () =>
+        ROOT +
+        (index++ === 0 ? "/job/input.png" : `/job/input-${index - 1}.png`),
+    ),
+  }));
+  const files = input.flatMap((entry, i) =>
+    entry.files.map((content, j) => ({ path: manifest[i].paths[j], content })),
+  );
+  return [
+    ...files,
+    {
+      path: ROOT + "/job/inputs.json",
+      content: Buffer.from(JSON.stringify(manifest)),
+    },
+  ];
+}
 
 export async function checkSandboxConnection() {
   const sandbox = await Sandbox.create({
@@ -127,11 +198,12 @@ async function run(
 export async function executeTool(
   code: string,
   spec: Proposal,
-  input: Buffer,
+  input: Buffer | ToolInput[],
   signal?: AbortSignal,
   context?: Record<string, unknown>,
 ) {
-  if (input.length > MAX_FILE_BYTES) throw new Error("Input exceeds 10 MB.");
+  const normalized = normalizeInputs(spec, input);
+  const format = resolvedOutputFormat(spec);
   const sandbox = await runtimeSandbox(signal, context);
   try {
     await sandbox.writeFiles([
@@ -140,19 +212,23 @@ export async function executeTool(
         path: ROOT + "/job/spec.json",
         content: Buffer.from(JSON.stringify(spec)),
       },
-      { path: ROOT + "/job/input.png", content: input },
+      ...inputFiles(normalized),
     ]);
     await run(sandbox, "execute", signal, context);
     const result = await sandbox.readFileToBuffer({
-      path: ROOT + "/job/output.png",
+      path: ROOT + `/job/output.${format}`,
     });
     if (!result || result.length > MAX_FILE_BYTES)
       throw new Error("Missing or oversized output.");
     const metadata = await sharp(result, {
       limitInputPixels: 16777216,
     }).metadata();
-    if (metadata.format !== "png" || (metadata.pages || 1) !== 1)
-      throw new Error("Output must be one static PNG.");
+    if (
+      metadata.format !== (format === "avif" ? "heif" : format) ||
+      (metadata.pages || 1) !== 1 ||
+      (format === "avif" && metadata.compression !== "av1")
+    )
+      throw new Error("Output must match the selected static image format.");
     await sharp(result, { limitInputPixels: 16777216 }).raw().toBuffer();
     return result;
   } finally {
@@ -182,6 +258,22 @@ export async function testTool(
     const fixture = await sharp(raw, { raw: { width, height, channels: 4 } })
       .png()
       .toBuffer();
+    const secondaryFixture = await sharp({
+      create: {
+        width: 2,
+        height: 2,
+        channels: 4,
+        background: { r: 240, g: 10, b: 30, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer();
+    const testInputs = proposalInputs(spec).map((d, index) => ({
+      id: d.id,
+      files: Array.from({ length: d.type === "images" ? 3 : 1 }, (_, j) =>
+        index === 0 && j === 0 ? fixture : secondaryFixture,
+      ),
+    }));
     await sandbox.writeFiles([
       { path: ROOT + "/job/tool.cjs", content: Buffer.from(code) },
       { path: ROOT + "/job/tests.cjs", content: Buffer.from(tests) },
@@ -189,7 +281,7 @@ export async function testTool(
         path: ROOT + "/job/spec.json",
         content: Buffer.from(JSON.stringify(spec)),
       },
-      { path: ROOT + "/job/input.png", content: fixture },
+      ...inputFiles(testInputs),
     ]);
     try {
       await timedStage(
@@ -210,7 +302,7 @@ export async function testTool(
       // Fresh microVM: generated tests cannot alter the module, fixture or trusted runner.
       const output = await timedStage(
         "independent-tests",
-        () => executeTool(code, spec, fixture, signal, context),
+        () => executeTool(code, spec, testInputs, signal, context),
         context,
       );
       if (!output || output.length > MAX_FILE_BYTES)
@@ -218,12 +310,34 @@ export async function testTool(
       const metadata = await sharp(output, {
         limitInputPixels: 16777216,
       }).metadata();
-      if (metadata.format !== "png") throw new Error("Output must be PNG.");
+      if (
+        metadata.format !==
+        (resolvedOutputFormat(spec) === "avif"
+          ? "heif"
+          : resolvedOutputFormat(spec))
+      )
+        throw new Error("Unexpected output format.");
       results.push({
-        name: "Independent PNG decoding and file limit",
+        name: "Independent image decoding and file limit",
         passed: true,
       });
       if (spec.operation === "custom") {
+        const formatControl =
+          spec.inputs && spec.parameters.find((p) => p.id === "outputFormat");
+        for (const option of formatControl?.options ?? []) {
+          if (option.value === resolvedOutputFormat(spec)) continue;
+          const variant = {
+            ...spec,
+            parameters: spec.parameters.map((p) =>
+              p.id === "outputFormat" ? { ...p, default: option.value } : p,
+            ),
+          };
+          await executeTool(code, variant, testInputs, signal, context);
+          results.push({
+            name: `Independent ${option.value.toUpperCase()} decoding and file limit`,
+            passed: true,
+          });
+        }
         // Arbitrary algorithms have no trusted universal pixel oracle.
         results.push({
           name: "Custom effect checked by model tests only",

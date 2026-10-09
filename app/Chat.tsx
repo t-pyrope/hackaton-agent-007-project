@@ -2,7 +2,11 @@ import { Dispatch, SetStateAction, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Icon } from "@/components/Icon";
 import { Tool } from "@/app/types";
-import type { ConfirmableProposal, BuildStatus } from "@/lib/tool-contract";
+import {
+  proposalInputs,
+  type ConfirmableProposal,
+  type BuildStatus,
+} from "@/lib/tool-contract";
 import Image from "next/image";
 
 type Message = { role: "user" | "assistant"; content: string };
@@ -211,7 +215,18 @@ export const Chat = ({
             <strong>{proposal.spec.name}</strong>
             <p>{proposal.spec.description}</p>
             <p>
-              One image → PNG
+              {proposalInputs(proposal.spec)
+                .map((input) =>
+                  input.type === "images"
+                    ? `${input.id} (multiple images)`
+                    : input.id,
+                )
+                .join(" + ")}{" "}
+              → {proposal.spec.outputFormat.toUpperCase()}
+              {proposal.spec.operation === "custom" &&
+              proposal.spec.parameters.some((p) => p.id === "outputFormat")
+                ? " (selectable format)"
+                : ""}
               {proposal.spec.operation === "resize"
                 ? ` · ${proposal.spec.width} × ${proposal.spec.height} px`
                 : proposal.spec.operation === "rotate"
