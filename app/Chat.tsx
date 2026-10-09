@@ -364,6 +364,17 @@ export const Chat = ({
           send();
         }}
       >
+        <p
+          style={{
+            margin: "0 0 12px",
+            fontSize: 12,
+            lineHeight: 1.5,
+            color: "#92400e",
+          }}
+        >
+          Victor is still in development. Please do not upload or share sensitive
+          information, such as personal data, passwords, or confidential files.
+        </p>
         {preview && (
           <div
             style={{
